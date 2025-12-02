@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "modrax"
+version = "0.1.0"
+description = "A modular JAX reinforcement learning framework with composable components"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Marco Jiralerspong"}
+]
+dependencies = [
+    "jax[cuda]",
+    "jaxlib",
+    "flax",
+    "optax",
+    "orbax-checkpoint",
+    "chex",
+    "numpy",
+    "typing-extensions",
+    "pydantic",
+    "jaxtyping",
+    "requests",
+    "opencv-python",
+
+    # Envs
+    "craftax",
+    "gymnax",
+    "jumanji",
+    # "octax", Needs to be installed from source
+    "pgx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modrax"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["F722", "N803", "N806", "UP035"]  # Allow forward annotation syntax for shape annotations (e.g., Arr["batch"])
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

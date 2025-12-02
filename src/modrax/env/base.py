@@ -1,0 +1,172 @@
+from typing import Any, NamedTuple
+
+import jax
+import numpy as np
+from jaxtyping import Array, Bool, Float, Int, Key
+from pydantic import BaseModel
+
+from modrax.types import Shape
+
+
+class EnvConfig(BaseModel):
+    env_name: str = ""
+
+
+# Type alias for environment-specific state
+EnvState = Any
+
+
+class State(NamedTuple):
+    env_state: EnvState
+    obs: Float[Array, "..."]
+    action_mask: Bool[Array, "..."]
+
+
+class StateWithMetrics(NamedTuple):
+    """Add episode-level metrics (return and length)."""
+
+    env_state: EnvState
+    obs: Float[Array, "..."]
+    action_mask: Bool[Array, "..."]
+    episode_return: Float[Array, ""]
+    episode_length: Int[Array, ""]
+
+
+class StepOutput(NamedTuple):
+    reward: Float[Array, ""]
+    done: Bool[Array, ""]
+    info: Any
+
+
+class Env:
+    obs_shape: Shape
+    num_actions: int
+    config: EnvConfig
+
+    def __new__(cls, config: EnvConfig, jit: bool = True):
+        """Factory method to create appropriate Env subclass based on config type."""
+        # If called on base Env class, dispatch to appropriate subclass
+        if cls is Env:
+            from modrax.env.craftax_env import CraftaxEnv, CraftaxEnvConfig
+            from modrax.env.gymnax_env import GymnaxEnv, GymnaxEnvConfig
+            from modrax.env.octax_env import OctaxEnv, OctaxEnvConfig
+            from modrax.env.pgx_env import PGXEnv, PGXEnvConfig
+
+            if isinstance(config, PGXEnvConfig):
+                return PGXEnv(config, jit)
+            elif isinstance(config, CraftaxEnvConfig):
+                return CraftaxEnv(config, jit)
+            elif isinstance(config, OctaxEnvConfig):
+                return OctaxEnv(config, jit)
+            elif isinstance(config, GymnaxEnvConfig):
+                return GymnaxEnv(config, jit)
+            else:
+                raise ValueError(f"Unknown env config type: {type(config)}")
+        else:
+            # If called on a subclass, use normal instantiation
+            return super().__new__(cls)
+
+    def __init__(self, config: EnvConfig, jit: bool = True):
+        self.config = config
+        self._setup_fns(jit=jit)
+
+    def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
+        """Reset environment and return State. Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_reset_fn")
+
+    def _inner_step_fn(
+        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
+    ) -> tuple[StepOutput, State]:
+        """Step environment and return (StepOutput, State). Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_step_fn")
+
+    def reset_fn(self, key: Key[Array, ""]) -> StateWithMetrics:
+        """Reset environment with episode metrics initialization."""
+        state = self._inner_reset_fn(key)
+        return StateWithMetrics(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            episode_return=jax.numpy.zeros(()),
+            episode_length=jax.numpy.zeros((), dtype=jax.numpy.int32),
+        )
+
+    def step_fn(
+        self, state: StateWithMetrics, action: Float[Array, "..."], key: Key[Array, ""]
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step environment with automatic return/length accumulation and auto-reset."""
+        # Convert to State for inner step
+        inner_state = State(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+        )
+
+        # Step WITHOUT auto-reset to get terminal state
+        step_output, new_state = self._inner_step_fn(inner_state, action, key)
+
+        # Auto-reset if done: replace state with reset state
+        # but keep the terminal reward/done/info from step_output
+        def do_reset():
+            reset_state = self._inner_reset_fn(key)
+            return State(
+                env_state=reset_state.env_state,
+                obs=reset_state.obs,
+                action_mask=reset_state.action_mask,
+            )
+
+        def no_reset():
+            return new_state
+
+        new_state = jax.lax.cond(
+            step_output.done > 0,
+            do_reset,
+            no_reset,
+        )
+
+        # Wrap back to StateWithMetrics with updated metrics
+        new_state_with_metrics = StateWithMetrics(
+            env_state=new_state.env_state,
+            obs=new_state.obs,
+            action_mask=new_state.action_mask,
+            episode_return=(state.episode_return + step_output.reward) * (1 - step_output.done),
+            episode_length=jax.numpy.int32((state.episode_length + 1) * (1 - step_output.done)),
+        )
+
+        return step_output, new_state_with_metrics
+
+    def _setup_fns(self, jit: bool):
+        """Setup vmapped and optionally JIT-compiled functions."""
+        reset_fn = jax.vmap(self.reset_fn)
+        step_fn = jax.vmap(self.step_fn)
+
+        if jit:
+            reset_fn = jax.jit(reset_fn)
+            step_fn = jax.jit(step_fn)
+
+        self._reset_fn = reset_fn
+        self._step_fn = step_fn
+
+    def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
+        """Reset environments with given keys."""
+        return self._reset_fn(keys)
+
+    def step(
+        self, state: StateWithMetrics, action: Float[Array, "B ..."], keys: Key[Array, " B"]
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step environments with given state, actions, and keys."""
+        return self._step_fn(state, action, keys)
+
+    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
+        """Sample random actions for multiple environments.
+
+        Returns actions with shape (num_envs,).
+        """
+        return jax.random.randint(key, (num_envs,), 0, self.num_actions)
+
+    def render(self, state: State | StateWithMetrics) -> np.ndarray:
+        """
+        Render a single environment state to RGB image.
+        Returns RGB image np.array of shape (H, W, 3) with dtype uint8
+        """
+        raise NotImplementedError("Subclasses must implement render")
