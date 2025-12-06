@@ -2,7 +2,7 @@
 
 import pytest
 
-from modrax.env import Env, CraftaxEnvConfig
+from modrax.env import CraftaxEnvConfig, Env
 from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
