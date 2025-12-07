@@ -1,3 +1,5 @@
+"""Network definition for standard block-based feedforward network."""
+
 import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float

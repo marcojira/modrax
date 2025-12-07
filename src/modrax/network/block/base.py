@@ -10,7 +10,6 @@ They are meant to be composed into networks.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from flax import nnx
 from jaxtyping import Array, Float
@@ -58,8 +57,10 @@ class Block(BlockBase, ABC):
         pass
 
 
-# Type alias for recurrent state (can be any pytree structure)
-RecurrentState = Any
+class RecurrentState:
+    """Base class for different types of reccurent states"""
+
+    pass
 
 
 class RecurrentBlock(BlockBase, ABC):

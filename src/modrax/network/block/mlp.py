@@ -3,7 +3,6 @@
 from typing import Callable, Sequence
 
 import jax
-import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
 from pydantic import ConfigDict
@@ -14,16 +13,9 @@ from modrax.types import Shape
 
 
 class MLPConfig(BlockConfig):
-    """Configuration for MLP block.
-
-    Attributes:
-        hidden_dims: Sequence of hidden layer dimensions
-        activation_fn: Activation function to apply after each hidden layer
-    """
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    hidden_dims: Sequence[int]
+    hidden_dims: Sequence[int]  # Sequence of hidden layer dimensions
     activation_fn: Callable = jax.nn.relu
 
 

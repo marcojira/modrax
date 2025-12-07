@@ -53,7 +53,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["F722", "N803", "N806", "UP035"]  # Allow forward annotation syntax for shape annotations (e.g., Arr["batch"])
+ignore = ["F722", "N803", "N806", "UP035", "N811"]
 
 [tool.ruff.format]
 quote-style = "double"
