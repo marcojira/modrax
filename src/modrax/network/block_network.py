@@ -3,15 +3,14 @@
 import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
-from modrax.network.base import Network
+from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockConfig
-from modrax.rollout.base import RolloutData
 from modrax.types import Shape
 
 
-class BlockNetworkConfig(BaseModel):
+class BlockNetworkConfig(NetworkConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     encoders: dict[

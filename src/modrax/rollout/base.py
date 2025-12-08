@@ -1,7 +1,8 @@
-from typing import NamedTuple, TypedDict
+from typing import Any, Callable, NamedTuple, Protocol, TypedDict
 
 from flax import struct
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, Key
+from pydantic import BaseModel
 
 
 class NetworkInput(TypedDict):
@@ -26,3 +27,20 @@ class Trajectory(NamedTuple):
 @struct.dataclass
 class RolloutData:
     trajectory: Trajectory
+
+
+class RolloutConfig(BaseModel):
+    model_config = {"frozen": True}
+    num_steps: int = 128
+
+
+class RolloutFn(Protocol):
+    def __call__(
+        self,
+        network: Any,
+        policy_fn: Callable,
+        step_fn: Callable,
+        env_state: Any,
+        config: RolloutConfig,
+        key: Key[Array, ""],
+    ) -> tuple[Any, RolloutData]: ...

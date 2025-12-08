@@ -1,6 +1,7 @@
 # Custom
 archive/
 CLAUDE.md
+out/
 
 # Python
 __pycache__/

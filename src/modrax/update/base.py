@@ -11,7 +11,8 @@ from modrax.optimizer import Optimizer
 from modrax.rollout.base import RolloutData
 
 
-class UpdateConfig(BaseModel, frozen=True): ...
+class UpdateConfig(BaseModel):
+    model_config = {"frozen": True}
 
 
 class UpdateFn(Protocol):
@@ -21,7 +22,7 @@ class UpdateFn(Protocol):
         optimizer: Optimizer,
         data: RolloutData,
         final_state: Any,
-        config: UpdateConfig,
+        config: Any,
         key: Key[Array, ""],
     ) -> tuple[Any, dict]: ...
 

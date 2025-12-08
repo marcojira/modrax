@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from flax import nnx
 
 from modrax.policy import softmax_policy
+from modrax.rollout.base import RolloutConfig
 from modrax.rollout.rollout import rollout
 from modrax.update.ppo import PPOConfig, ppo_update
 
@@ -24,7 +25,7 @@ def test_ppo_update(env, network, optimizer):
         policy_fn=softmax_policy,
         step_fn=env.step,
         env_state=env_state,
-        num_steps=num_steps,
+        config=RolloutConfig(num_steps=num_steps),
         key=rollout_key,
     )
 

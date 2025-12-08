@@ -5,10 +5,26 @@ from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
+from pydantic import BaseModel
+
+from modrax.types import Shape
+
+
+class NetworkConfig(BaseModel):
+    pass
 
 
 class Network(nnx.Module):
     """Base class for all network types. Enables loading/saving functionality"""
+
+    def __init__(
+        self,
+        input_shapes: dict[str, Shape | int],  # Dict mapping input names to shapes
+        output_dims: dict[str, int],  # Dict mapping head names to output dimensions
+        config: NetworkConfig,
+        rngs: nnx.Rngs,
+    ):
+        pass
 
     def save(self, checkpoint_dir_path: str) -> None:
         """Save network to checkpoint directory.

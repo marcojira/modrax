@@ -6,7 +6,7 @@ from jaxtyping import Array, Key
 
 from modrax.env import StateWithMetrics
 from modrax.policy import PolicyFn
-from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutData, Trajectory
+from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutConfig, RolloutData, Trajectory
 
 
 class ForwardNetwork(Protocol):
@@ -18,7 +18,7 @@ def rollout(
     policy_fn: PolicyFn,
     step_fn: Callable,
     env_state: StateWithMetrics,
-    num_steps: int,
+    config: RolloutConfig,
     key: Key[Array, ""],
 ) -> tuple[StateWithMetrics, RolloutData]:
     def step(carry, step_key):
@@ -50,7 +50,7 @@ def rollout(
 
         return (network, new_env_state), trajectory
 
-    step_keys = jax.random.split(key, num_steps)
+    step_keys = jax.random.split(key, config.num_steps)
     (_, final_env_state), trajectory = nnx.scan(step)((network, env_state), step_keys)
 
     data = RolloutData(trajectory=trajectory)

@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-from flax import nnx
 from jaxtyping import Array, Float, Key
 
 from modrax.network.base import Network
@@ -9,7 +8,9 @@ from modrax.rollout.base import RolloutData, Trajectory
 from modrax.update.base import UpdateConfig, make_trajectory_minibatches, update_network
 
 
-class PPOConfig(UpdateConfig, frozen=True):
+class PPOConfig(UpdateConfig):
+    model_config = {"frozen": True}
+
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
@@ -33,7 +34,7 @@ def compute_gae_advantages(
 
         return (gae, val), gae
 
-    values = trajectory.network_output["value"].squeeze(-1)
+    values = trajectory.network_output["value"].squeeze(-1)  # type: ignore
     transitions = (trajectory.dones, values, trajectory.rewards)
     _, advantages = jax.lax.scan(
         backwards_fn,
@@ -79,8 +80,8 @@ def ppo_loss(batch: dict, values, action_logits, config: PPOConfig):
     actor_loss = -jnp.minimum(prob_ratio * advantages, clipped_ratio * advantages)
 
     # Critic loss with clipping
-    value_pred_clipped = batch["network_output"]["value"] + (
-        values - batch["network_output"]["value"]
+    value_pred_clipped = batch["network_output"]["value"].squeeze(-1) + (
+        values - batch["network_output"]["value"].squeeze(-1)
     ).clip(-config.clip_eps, config.clip_eps)
     value_losses = jnp.square(values - batch["return"])
     value_losses_clipped = jnp.square(value_pred_clipped - batch["return"])
