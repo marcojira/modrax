@@ -1,9 +1,9 @@
 """Test PGX environment wrapper."""
 
 import pytest
+from helpers import run_env_test
 
 from modrax.env import Env, PGXEnvConfig
-from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "minatar-asterix",

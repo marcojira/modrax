@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from modrax.network.base import Network
 from modrax.network.block.base import Block, BlockConfig
+from modrax.rollout.base import RolloutData
 from modrax.types import Shape
 
 
@@ -103,14 +104,11 @@ class BlockNetwork(Network):
             for name, (block_cls, block_config) in config.heads.items()
         }
 
-    def __call__(
-        self, inputs: dict[str, Float[Array, "B ..."]], train: bool = False
-    ) -> dict[str, Array]:
+    def __call__(self, inputs: dict[str, Float[Array, "B ..."]]) -> dict[str, Array]:
         """Forward pass through the network.
 
         Args:
             inputs: Dict mapping input names to input arrays
-            train: Training mode flag (unused, for compatibility)
 
         Returns:
             Dict mapping head names to output arrays

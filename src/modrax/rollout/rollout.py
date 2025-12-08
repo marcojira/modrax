@@ -29,9 +29,8 @@ def rollout(
         policy_key, env_key = jax.random.split(step_key)
 
         # Run network
-        out = network({"obs": obs}, train=False)
-        val, logits = out["value"], out["policy"]
-        val = val.squeeze(-1)
+        out = network({"obs": obs})
+        logits = out["policy"]
         action = policy_fn(logits, action_mask, policy_key)
 
         # Step environment
@@ -39,7 +38,7 @@ def rollout(
         step_output, new_env_state = step_fn(env_state, action, env_keys)
 
         trajectory = Trajectory(
-            observations=obs,
+            obs=obs,
             actions=action,
             rewards=step_output.reward,
             action_masks=action_mask,

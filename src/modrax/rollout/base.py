@@ -13,7 +13,7 @@ class NetworkOutput(TypedDict):
 
 
 class Trajectory(NamedTuple):
-    observations: Float[Array, "T B ..."]
+    obs: Float[Array, "T B ..."]
     actions: Float[Array, "T B ..."]
     rewards: Float[Array, "T B"]
     action_masks: Float[Array, "T B A"]

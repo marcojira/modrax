@@ -1,9 +1,9 @@
 """Test Craftax environment wrapper."""
 
 import pytest
+from helpers import run_env_test
 
 from modrax.env import CraftaxEnvConfig, Env
-from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "Craftax-Symbolic-v1",

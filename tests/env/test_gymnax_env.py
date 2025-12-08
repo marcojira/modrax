@@ -1,9 +1,9 @@
 """Test Gymnax environment wrapper."""
 
 import pytest
+from helpers import run_env_test
 
 from modrax.env import Env, GymnaxEnvConfig
-from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "CartPole-v1",
