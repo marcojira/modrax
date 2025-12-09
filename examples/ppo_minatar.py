@@ -1,15 +1,12 @@
 """Train PPO on MinAtar."""
 
 from modrax.env import PGXEnvConfig
-from modrax.network.block.linear import Linear, LinearConfig
-from modrax.network.block.mlp import MLP, MLPConfig
-from modrax.network.block_network import BlockNetwork, BlockNetworkConfig
+from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
 from modrax.optimizer import OptimizerConfig
 from modrax.policy import softmax_policy
-from modrax.rollout.base import RolloutConfig
-from modrax.rollout.rollout import rollout
+from modrax.rollout import RolloutConfig, rollout
 from modrax.training import TrainConfig, train
-from modrax.update.ppo import PPOConfig, ppo_update
+from modrax.update import PPOConfig, ppo_update
 
 
 def main():

@@ -28,7 +28,12 @@ def test_gtrxl_init_and_call(rngs):
     # Test init_recurrent_state
     state = gtrxl.init_recurrent_state(batch_size)
     assert isinstance(state, GTrXLRecurrentState)
-    assert state.memory.shape == (batch_size, config.rollout_memory_len, config.num_layers, input_dim)
+    assert state.memory.shape == (
+        batch_size,
+        config.rollout_memory_len,
+        config.num_layers,
+        input_dim,
+    )
     assert state.mask.shape == (batch_size, 1, 1, 1 + config.rollout_memory_len)
 
     # Test __call__

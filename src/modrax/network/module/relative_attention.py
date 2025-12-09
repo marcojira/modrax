@@ -1,5 +1,7 @@
 """
-Implementation of relative multi-head attention as described in "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context"
+Implementation of relative multi-head attention as described in
+"Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context"
+
 Follows the notation and description in "Stabilizing Transformers for Reinforcement Learning"
 
 Inspired by:

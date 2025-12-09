@@ -1,5 +1,6 @@
 """Network definition for standard block-based feedforward network."""
 
+import jax
 import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
@@ -7,6 +8,7 @@ from pydantic import ConfigDict
 
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockConfig
+from modrax.rollout.base import RolloutData
 from modrax.types import Shape
 
 
@@ -126,3 +128,21 @@ class BlockNetwork(Network):
         outputs = {name: head(features) for name, head in self.heads.items()}
 
         return outputs
+
+    def train_forward(self, data: RolloutData):
+        """Forward pass for training with sequential data."""
+
+        # Get shape from obs
+        obs = data.trajectory.obs
+        batch_size, length = obs.shape[0], obs.shape[1]
+
+        inputs = {}
+        for name in self.encoders.keys():
+            x = getattr(data.trajectory, name)
+            inputs[name] = x.reshape(-1, *x.shape[2:])  # Flatten [B, T, ...] -> [B*T, ...]
+
+        out = self(inputs)
+
+        # Reshape to original
+        out = jax.tree.map(lambda x: x.reshape(batch_size, length, *x.shape[1:]), out)
+        return out

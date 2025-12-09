@@ -9,8 +9,7 @@ Inspired by:
 
 import jax
 import jax.numpy as jnp
-from attr import dataclass
-from flax import nnx
+from flax import nnx, struct
 from jaxtyping import Array, Bool, Float
 
 from modrax.network.block.base import BlockConfig, RecurrentBlock, RecurrentState
@@ -27,7 +26,7 @@ class GTrXLConfig(BlockConfig):
     gating_bias: float = 0.0
 
 
-@dataclass
+@struct.dataclass
 class GTrXLRecurrentState(RecurrentState):
     memory: Float[Array, "B M L D"]
     mask: Bool[Array, "B 1 1 M+1"]
@@ -100,6 +99,15 @@ class GatedTransformerXL(RecurrentBlock):
 
         return GTrXLRecurrentState(memory=init_memory, mask=init_mask)
 
+    def reset_recurrent_state(self, recurrent_state: GTrXLRecurrentState, done: Bool[Array, " B"]):
+        done = done[:, None, None, None]  # Add dimensions for broadcasting
+
+        # Reset memory/mask for states that are done
+        memory = jnp.where(done, 0, recurrent_state.memory)
+        mask = jnp.where(done, 0, recurrent_state.mask)
+
+        return GTrXLRecurrentState(memory=memory, mask=mask)
+
     def __call__(
         self,
         encoded_obs: Float[Array, "B T D"],
@@ -126,10 +134,13 @@ class GatedTransformerXL(RecurrentBlock):
     def train_forward(
         self,
         encoded_obs: Float[Array, "B T D"],
-        saved_memory: Float[Array, "B T L D"],
-        init_memory: Float[Array, "B M L D"],
-        mask: Float[Array, "B T 1 M+1"],
+        recurrent_state: GTrXLRecurrentState,
+        init_recurrent_state: GTrXLRecurrentState,
     ):
+        saved_memory = recurrent_state.memory
+        init_memory = init_recurrent_state.memory
+        mask = recurrent_state.mask
+
         # Split minibatch into segments (along time dimension)
         num_segments = encoded_obs.shape[1] // self.segment_len
         segment_batch_size = encoded_obs.shape[0] * num_segments

@@ -5,8 +5,11 @@ import pytest
 from flax import nnx
 
 from modrax.env import Env, GymnaxEnvConfig
+from modrax.network.block.gtrxl import GatedTransformerXL, GTrXLConfig
 from modrax.network.block.mlp import MLP, MLPConfig
+from modrax.network.block.rnn import NnxRNN, RNNConfig
 from modrax.network.block_network import BlockNetwork, BlockNetworkConfig
+from modrax.network.recurrent_network import RecurrentNetwork, RecurrentNetworkConfig
 from modrax.optimizer import Optimizer, OptimizerConfig
 
 
@@ -62,3 +65,38 @@ def network(env, rngs):
 def optimizer(network):
     """Optimizer for testing."""
     return Optimizer(OptimizerConfig(), network)
+
+
+@pytest.fixture
+def recurrent_optimizer(recurrent_network):
+    """Optimizer for recurrent network testing."""
+    return Optimizer(OptimizerConfig(), recurrent_network)
+
+
+@pytest.fixture(params=["gtrxl", "rnn"])
+def recurrent_network(request, env, rngs):
+    """Parametrized recurrent network fixture (GTrXL and RNN)."""
+    recurrent_configs = {
+        "gtrxl": (GatedTransformerXL, GTrXLConfig(
+            num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4
+        )),
+        "rnn": (NnxRNN, RNNConfig(cell_type="lstm")),
+    }
+
+    hidden_dim = 8
+    config = RecurrentNetworkConfig(
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(hidden_dim,)))},
+        encoder_dim=hidden_dim,
+        recurrent=recurrent_configs[request.param],
+        recurrent_dim=hidden_dim,
+        heads={
+            "policy": (MLP, MLPConfig(hidden_dims=(4,))),
+            "value": (MLP, MLPConfig(hidden_dims=(4,))),
+        },
+    )
+    return RecurrentNetwork(
+        input_shapes={"obs": env.obs_shape},
+        output_dims={"policy": env.num_actions, "value": 1},
+        config=config,
+        rngs=rngs,
+    )

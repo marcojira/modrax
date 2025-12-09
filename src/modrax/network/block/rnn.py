@@ -2,9 +2,10 @@
 
 from typing import Any, Callable, Literal
 
-from attr import dataclass
-from flax import nnx
-from jaxtyping import Array, Float
+import jax
+import jax.numpy as jnp
+from flax import nnx, struct
+from jaxtyping import Array, Bool, Float
 
 from modrax.network.block.base import BlockConfig, RecurrentBlock, RecurrentState
 
@@ -18,7 +19,7 @@ class RNNConfig(BlockConfig):
     residual: bool = False  # Use residual connections (only for simple cell_type)
 
 
-@dataclass
+@struct.dataclass
 class RNNRecurrentState(RecurrentState):
     carry: Any  # Cell-specific carry (tuple for LSTM, array for GRU/Simple)
 
@@ -81,6 +82,17 @@ class NnxRNN(RecurrentBlock):
         carry = self.cell.initialize_carry(input_shape)
         return RNNRecurrentState(carry=carry)
 
+    def reset_recurrent_state(
+        self, recurrent_state: RNNRecurrentState, done: Bool[Array, " B"]
+    ) -> RNNRecurrentState:
+        """Reset carry to zeros for episodes that are done."""
+
+        def reset_carry(carry):
+            return jnp.where(done[:, None], 0, carry)
+
+        new_carry = jax.tree.map(reset_carry, recurrent_state.carry)
+        return RNNRecurrentState(carry=new_carry)
+
     def __call__(
         self,
         obs: Float[Array, "B T D"],
@@ -93,6 +105,7 @@ class NnxRNN(RecurrentBlock):
     def train_forward(
         self,
         encoded_obs: Float[Array, "B T D"],
+        recurrent_state: RNNRecurrentState,
         init_recurrent_state: RNNRecurrentState,
     ) -> Float[Array, "B T H"]:
         """Forward pass for training (returns only output, not state)."""

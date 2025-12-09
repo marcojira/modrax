@@ -86,3 +86,8 @@ class RecurrentBlock(BlockBase, ABC):
     def init_recurrent_state(self, *args, **kwargs) -> RecurrentState:
         """Initialize the recurrent state (with block-specific arguments)"""
         pass
+
+    @abstractmethod
+    def reset_recurrent_state(self, *args, **kwargs) -> RecurrentState:
+        """Reset the recurrent state (with block-specific arguments)"""
+        pass

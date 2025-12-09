@@ -63,3 +63,6 @@ class Network(nnx.Module):
 
     def __call__(self, *args, **kwargs) -> Any:
         pass
+
+    def train_forward(self, *args, **kwargs) -> Any:
+        pass

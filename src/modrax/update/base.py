@@ -1,7 +1,6 @@
 from typing import Any, Callable, Protocol
 
 import jax
-import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Key
 from pydantic import BaseModel
@@ -21,17 +20,13 @@ class UpdateFn(Protocol):
         network: Any,
         optimizer: Optimizer,
         data: RolloutData,
-        final_state: Any,
         config: Any,
         key: Key[Array, ""],
     ) -> tuple[Any, dict]: ...
 
 
 def make_trajectory_minibatches(all_data: dict, key: Key[Array, ""], minibatch_size: int):
-    batch_size = all_data["obs"].shape[1]
-
-    # Transpose to (B, T, ...) for env-only permutation
-    all_data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), all_data)
+    batch_size = all_data["data"].trajectory.obs.shape[0]
 
     # Shuffle trajectories (permute envs only)
     permutation = jax.random.permutation(key, batch_size)

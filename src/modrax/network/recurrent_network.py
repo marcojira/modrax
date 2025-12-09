@@ -5,18 +5,19 @@ from typing import Any
 import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
-from modrax.network.block.rnn import RNNConfig
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
-from modrax.network.base import Network
+from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockConfig, RecurrentBlock, RecurrentState
 from modrax.network.block.gtrxl import GTrXLConfig
+from modrax.network.block.rnn import RNNConfig
+from modrax.rollout.recurrent_rollout import RecurrentRolloutData
 from modrax.types import Shape
 
 RecurrentBlockConfig = RNNConfig | GTrXLConfig
 
 
-class RecurrentNetworkConfig(BaseModel):
+class RecurrentNetworkConfig(NetworkConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     encoders: dict[
@@ -114,6 +115,9 @@ class RecurrentNetwork(Network):
     def init_recurrent_state(self, *args, **kwargs) -> Any:
         return self.recurrent_block.init_recurrent_state(*args, **kwargs)
 
+    def reset_recurrent_state(self, *args, **kwargs) -> Any:
+        return self.recurrent_block.reset_recurrent_state(*args, **kwargs)
+
     def __call__(
         self,
         inputs: dict[str, Float[Array, "B ..."]],
@@ -140,23 +144,9 @@ class RecurrentNetwork(Network):
 
         return outputs, recurrent_state
 
-    def train_forward(
-        self,
-        inputs: dict[str, Float[Array, "B T ..."]],
-        init_recurrent_state: Any,
-    ) -> dict[str, Array]:
-        """Forward pass for training with sequential data.
-
-        Args:
-            inputs: Dict mapping input names to input arrays with shape [B, T, ...]
-            init_recurrent_state: Initial recurrent state for the sequence
-
-        Returns:
-            outputs: Dict mapping head names to outputs with shape [B, T, output_dim]
-        """
-        # Get batch size and sequence length from first input
-        first_input = next(iter(inputs.values()))
-        batch_size, seq_len = first_input.shape[0], first_input.shape[1]
+    def train_forward(self, data: RecurrentRolloutData) -> dict[str, Array]:
+        """Forward pass for training with sequential data."""
+        batch_size, seq_len = data.trajectory.obs.shape[0], data.trajectory.obs.shape[1]
 
         def flatten(x):
             return jnp.reshape(x, (-1, *x.shape[2:]))
@@ -167,15 +157,15 @@ class RecurrentNetwork(Network):
         # Encode each input: flatten [B, T, ...] to [B*T, ...], encode, then unflatten to [B, T, D]
         encoded = []
         for name in sorted(self.encoders.keys()):
-            x = self.encoders[name](flatten(inputs[name]))  # [B*T, encoder_dim]
+            x = getattr(data.trajectory, name)
+            x = self.encoders[name](flatten(x))  # [B*T, encoder_dim]
             x = unflatten(x)  # [B, T, encoder_dim]
             encoded.append(x)
 
-        # Concatenate encoders
         x = jnp.concatenate(encoded, axis=-1)  # [B, T, encoder_dim * num_inputs]
 
         # Recurrent processing
-        x = self.recurrent_block.train_forward(x, init_recurrent_state)
+        x = self.recurrent_block.train_forward(x, data.recurrent_state, data.init_recurrent_state)
 
         # Flatten for heads, then unflatten results
         x = flatten(x)

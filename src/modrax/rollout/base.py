@@ -27,6 +27,7 @@ class Trajectory(NamedTuple):
 @struct.dataclass
 class RolloutData:
     trajectory: Trajectory
+    final_out: NetworkOutput
 
 
 class RolloutConfig(BaseModel):
@@ -41,6 +42,7 @@ class RolloutFn(Protocol):
         policy_fn: Callable,
         step_fn: Callable,
         env_state: Any,
+        recurrent_state: Any,
         config: RolloutConfig,
         key: Key[Array, ""],
-    ) -> tuple[Any, RolloutData]: ...
+    ) -> tuple[Any, Any | None, RolloutData]: ...
