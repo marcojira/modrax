@@ -11,6 +11,7 @@ from modrax.network import (
     RecurrentNetwork,
     RecurrentNetworkConfig,
 )
+from modrax.types import NUM_ACTIONS, OBS_SHAPE
 from modrax.optimizer import OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.rollout import RolloutConfig, recurrent_rollout
@@ -22,7 +23,7 @@ def main():
     env_config = CraftaxEnvConfig(env_name="Craftax-Symbolic-v1")
 
     network_config = RecurrentNetworkConfig(
-        encoders={"obs": (Linear, LinearConfig())},
+        encoders={"obs": (Linear, LinearConfig(), OBS_SHAPE)},
         encoder_dim=256,
         recurrent=(
             GatedTransformerXL,
@@ -36,8 +37,8 @@ def main():
         ),
         recurrent_dim=256,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(256, 256))),
-            "value": (MLP, MLPConfig(hidden_dims=(256, 256))),
+            "policy": (MLP, MLPConfig(hidden_dims=(256, 256)), NUM_ACTIONS),
+            "value": (MLP, MLPConfig(hidden_dims=(256, 256)), 1),
         },
     )
 

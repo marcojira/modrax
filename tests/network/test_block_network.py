@@ -10,21 +10,21 @@ def test_block_network(env, rngs, batch_obs):
     """Test BlockNetwork with multiple inputs and outputs."""
     config = BlockNetworkConfig(
         encoders={
-            "obs": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jax.nn.relu)),
-            "prev_action": (Linear, LinearConfig()),
+            "obs": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jax.nn.relu), None),
+            "prev_action": (Linear, LinearConfig(), (env.num_actions,)),
         },
         encoder_dim=32,
         trunk=(MLP, MLPConfig(hidden_dims=(64, 64), activation_fn=jax.nn.relu)),
         trunk_dim=64,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jax.nn.relu)),
-            "value": (Linear, LinearConfig()),
+            "policy": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jax.nn.relu), None),
+            "value": (Linear, LinearConfig(), 1),
         },
     )
 
     network = BlockNetwork(
-        input_shapes={"obs": env.obs_shape, "prev_action": env.num_actions},
-        output_dims={"policy": env.num_actions, "value": 1},
+        obs_shape=env.obs_shape,
+        num_actions=env.num_actions,
         config=config,
         rngs=rngs,
     )

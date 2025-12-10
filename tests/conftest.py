@@ -44,18 +44,18 @@ def batch_obs(env):
 def network(env, rngs):
     """Simple BlockNetwork for testing."""
     config = BlockNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(4,)))},
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(4,)), None)},
         encoder_dim=4,
         trunk=(MLP, MLPConfig(hidden_dims=(4,))),
         trunk_dim=4,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(4,))),
-            "value": (MLP, MLPConfig(hidden_dims=(4,))),
+            "policy": (MLP, MLPConfig(hidden_dims=(4,)), None),
+            "value": (MLP, MLPConfig(hidden_dims=(4,)), 1),
         },
     )
     return BlockNetwork(
-        input_shapes={"obs": env.obs_shape},
-        output_dims={"policy": env.num_actions, "value": 1},
+        obs_shape=env.obs_shape,
+        num_actions=env.num_actions,
         config=config,
         rngs=rngs,
     )
@@ -77,26 +77,27 @@ def recurrent_optimizer(recurrent_network):
 def recurrent_network(request, env, rngs):
     """Parametrized recurrent network fixture (GTrXL and RNN)."""
     recurrent_configs = {
-        "gtrxl": (GatedTransformerXL, GTrXLConfig(
-            num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4
-        )),
+        "gtrxl": (
+            GatedTransformerXL,
+            GTrXLConfig(num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4),
+        ),
         "rnn": (NnxRNN, RNNConfig(cell_type="lstm")),
     }
 
     hidden_dim = 8
     config = RecurrentNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(hidden_dim,)))},
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(hidden_dim,)), None)},
         encoder_dim=hidden_dim,
         recurrent=recurrent_configs[request.param],
         recurrent_dim=hidden_dim,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(4,))),
-            "value": (MLP, MLPConfig(hidden_dims=(4,))),
+            "policy": (MLP, MLPConfig(hidden_dims=(4,)), None),
+            "value": (MLP, MLPConfig(hidden_dims=(4,)), 1),
         },
     )
     return RecurrentNetwork(
-        input_shapes={"obs": env.obs_shape},
-        output_dims={"policy": env.num_actions, "value": 1},
+        obs_shape=env.obs_shape,
+        num_actions=env.num_actions,
         config=config,
         rngs=rngs,
     )

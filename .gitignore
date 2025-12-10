@@ -2,6 +2,7 @@
 archive/
 CLAUDE.md
 out/
+projects/
 
 # Python
 __pycache__/

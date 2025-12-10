@@ -31,6 +31,7 @@ pip install modrax/.
 
 from modrax.env import PGXEnvConfig
 from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
+from modrax.types import OBS_SHAPE, NUM_ACTIONS
 from modrax.optimizer import OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.rollout import RolloutConfig, rollout
@@ -40,14 +41,15 @@ from modrax.update import PPOConfig, ppo_update
 
 def main():
     # Networks are built from blocks: BlockNetwork goes from encoders -> trunk -> heads
+    # Use OBS_SHAPE/NUM_ACTIONS to use obs_shape/num_actions from environment
     network_config = BlockNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)))},
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)), OBS_SHAPE)},
         encoder_dim=64,
         trunk=(Linear, LinearConfig()),
         trunk_dim=32,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(64, 64))),
-            "value": (MLP, MLPConfig(hidden_dims=(64, 64))),
+            "policy": (MLP, MLPConfig(hidden_dims=(64, 64)), NUM_ACTIONS),
+            "value": (MLP, MLPConfig(hidden_dims=(64, 64)), 1),
         },
     )
 
@@ -131,22 +133,24 @@ Available blocks include:
 ```python
 from flax import nnx
 from modrax.network import RecurrentNetwork, RecurrentNetworkConfig, MLP, MLPConfig, NnxRNN, NnxRNNConfig
+from modrax.types import OBS_SHAPE, NUM_ACTIONS
 
 # Create a recurrent network with LSTM trunk
+# Use OBS_SHAPE/NUM_ACTIONS to use obs_shape/num_actions
 network_config = RecurrentNetworkConfig(
-    encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)))},
+    encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)), OBS_SHAPE)},
     encoder_dim=64,
     recurrent=(NnxRNN, NnxRNNConfig(cell_type="lstm")),
     recurrent_dim=128,
     heads={
-        "policy": (MLP, MLPConfig(hidden_dims=(64,))),
-        "value": (MLP, MLPConfig(hidden_dims=(64,))),
+        "policy": (MLP, MLPConfig(hidden_dims=(64,)), NUM_ACTIONS),
+        "value": (MLP, MLPConfig(hidden_dims=(64,)), 1),
     },
 )
 
 network = RecurrentNetwork(
-    input_shapes={"obs": (4,)},
-    output_dims={"policy": 4, "value": 1},
+    obs_shape=(4,),
+    num_actions=4,
     config=network_config,
     rngs=nnx.Rngs(0),
 )

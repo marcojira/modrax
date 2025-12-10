@@ -16,16 +16,16 @@ class BlockNetworkConfig(NetworkConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     encoders: dict[
-        str, tuple[type[Block], BlockConfig]
-    ]  # Mapping from input name to (BlockClass, BlockConfig)
+        str, tuple[type[Block], BlockConfig, Shape | None]
+    ]  # Mapping from input name to (BlockClass, BlockConfig, Shape). OBS_SHAPE/None = use obs_shape
     encoder_dim: int  # Output dimension for all encoders
 
     trunk: tuple[type[Block], BlockConfig]
     trunk_dim: int  # Output dimension for trunk
 
     heads: dict[
-        str, tuple[type[Block], BlockConfig]
-    ]  # Mapping output name to (BlockClass, BlockConfig)
+        str, tuple[type[Block], BlockConfig, int | None]
+    ]  # Mapping output name to (BlockClass, BlockConfig, output_dim). NUM_ACTIONS/None = use num_actions
 
 
 class BlockNetwork(Network):
@@ -42,51 +42,43 @@ class BlockNetwork(Network):
         input_2 ─► [Encoder 2] ─┘                      └─► [Head 2] ─► output_2
 
     Example:
-        >>> from modrax.network.component.linear import Linear, LinearConfig
-        >>> from modrax.network.component.mlp import MLP, MLPConfig
+        >>> from modrax.network.block.linear import Linear, LinearConfig
+        >>> from modrax.network.block.mlp import MLP, MLPConfig
+        >>> from modrax.types import OBS_SHAPE, NUM_ACTIONS
         >>> import jax.nn as jnn
         >>>
         >>> config = BlockNetworkConfig(
-        ...     encoders={"obs": (Linear, LinearConfig())},
+        ...     encoders={"obs": (MLP, MLPConfig(hidden_dims=(32,)), OBS_SHAPE)},
         ...     encoder_dim=32,
-        ...     trunk=(MLP, MLPConfig(hidden_dims=(64, 64), activation_fn=jnn.relu)),
+        ...     trunk=(MLP, MLPConfig(hidden_dims=(64, 64))),
         ...     trunk_dim=64,
         ...     heads={
-        ...         "policy": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jnn.relu)),
-        ...         "value": (Linear, LinearConfig()),
+        ...         "policy": (MLP, MLPConfig(hidden_dims=(32,)), NUM_ACTIONS),
+        ...         "value": (Linear, LinearConfig(), 1),
         ...     },
         ... )
         >>> network = BlockNetwork(
-        ...     input_shapes={"obs": (4,)},
-        ...     output_dims={"policy": 4, "value": 1},
+        ...     obs_shape=(4,),
+        ...     num_actions=2,
         ...     config=config,
         ...     rngs=rngs,
         ... )
         >>> outputs = network({"obs": obs_batch})
-        >>> # outputs = {"policy": [B, 4], "value": [B, 1]}
+        >>> # outputs = {"policy": [B, 2], "value": [B, 1]}
     """
 
     def __init__(
         self,
-        input_shapes: dict[str, Shape | int],  # Dict mapping input names to shapes
-        output_dims: dict[str, int],  # Dict mapping head names to output dimensions
+        obs_shape: Shape,
+        num_actions: int,
         config: BlockNetworkConfig,
         rngs: nnx.Rngs,
     ):
-        # Build encoder block for each input
-        self.encoders = {
-            name: block_cls(
-                input_shape=input_shapes[name],
-                output_dim=config.encoder_dim,
-                config=block_config,
-                rngs=rngs,
-            )
-            for name, (block_cls, block_config) in config.encoders.items()
-        }
+        self.encoders = self.build_encoders(obs_shape, config, rngs)
 
         # Build trunk block (takes concatenated encoders)
         trunk_cls, trunk_config = config.trunk
-        trunk_input_dim = len(input_shapes) * config.encoder_dim
+        trunk_input_dim = len(self.encoders) * config.encoder_dim
         self.trunk = trunk_cls(
             input_shape=trunk_input_dim,
             output_dim=config.trunk_dim,
@@ -94,15 +86,41 @@ class BlockNetwork(Network):
             rngs=rngs,
         )
 
-        # Build head block for each output
-        self.heads = {
+        self.heads = self.build_heads(num_actions, config.trunk_dim, config, rngs)
+
+    def build_encoders(
+        self,
+        obs_shape: Shape,
+        config: BlockNetworkConfig,
+        rngs: nnx.Rngs,
+    ) -> dict[str, Block]:
+        """Build encoder blocks for each input."""
+        return {
             name: block_cls(
-                input_shape=config.trunk_dim,
-                output_dim=output_dims[name],
+                input_shape=obs_shape if shape is None else shape,
+                output_dim=config.encoder_dim,
                 config=block_config,
                 rngs=rngs,
             )
-            for name, (block_cls, block_config) in config.heads.items()
+            for name, (block_cls, block_config, shape) in config.encoders.items()
+        }
+
+    def build_heads(
+        self,
+        num_actions: int,
+        feature_dim: int,
+        config: BlockNetworkConfig,
+        rngs: nnx.Rngs,
+    ) -> dict[str, Block]:
+        """Build head blocks for each output."""
+        return {
+            name: block_cls(
+                input_shape=feature_dim,
+                output_dim=num_actions if output_dim is None else output_dim,
+                config=block_config,
+                rngs=rngs,
+            )
+            for name, (block_cls, block_config, output_dim) in config.heads.items()
         }
 
     def __call__(self, inputs: dict[str, Float[Array, "B ..."]]) -> dict[str, Array]:

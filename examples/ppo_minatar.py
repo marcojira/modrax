@@ -2,6 +2,7 @@
 
 from modrax.env import PGXEnvConfig
 from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
+from modrax.types import NUM_ACTIONS, OBS_SHAPE
 from modrax.optimizer import OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.rollout import RolloutConfig, rollout
@@ -12,13 +13,13 @@ from modrax.update import PPOConfig, ppo_update
 def main():
     # Networks are built from blocks: BlockNetwork goes from encoders -> trunk -> heads
     network_config = BlockNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)))},
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)), OBS_SHAPE)},
         encoder_dim=64,
         trunk=(Linear, LinearConfig()),
         trunk_dim=32,
         heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(64, 64))),
-            "value": (MLP, MLPConfig(hidden_dims=(64, 64))),
+            "policy": (MLP, MLPConfig(hidden_dims=(64, 64)), NUM_ACTIONS),
+            "value": (MLP, MLPConfig(hidden_dims=(64, 64)), 1),
         },
     )
 

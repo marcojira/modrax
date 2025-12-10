@@ -58,8 +58,8 @@ def train(config: TrainConfig) -> Network:
     # Initialize components
     env = Env(config.env_config, jit=config.jit)
     network = config.network_cls(
-        {"obs": env.obs_shape},
-        {"value": 1, "policy": env.num_actions},
+        env.obs_shape,
+        env.num_actions,
         config.network_config,
         nnx.Rngs(network_key),
     )

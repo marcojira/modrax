@@ -19,8 +19,8 @@ class Network(nnx.Module):
 
     def __init__(
         self,
-        input_shapes: dict[str, Shape | int],  # Dict mapping input names to shapes
-        output_dims: dict[str, int],  # Dict mapping head names to output dimensions
+        obs_shape: Shape,
+        num_actions: int,
         config: NetworkConfig,
         rngs: nnx.Rngs,
     ):

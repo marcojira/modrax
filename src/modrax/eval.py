@@ -14,7 +14,7 @@ def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> d
     mean_ep_length = jnp.sum(trajectory.episode_lengths * trajectory.dones) / jnp.maximum(
         num_dones, 1
     )
-    mean_traj_reward = trajectory.rewards.sum(axis=0).mean()
+    mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
 
     all_metrics = {
         "Loss": infos["total_loss"].mean().item(),

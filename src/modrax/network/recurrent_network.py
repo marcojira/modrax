@@ -7,33 +7,36 @@ from flax import nnx
 from jaxtyping import Array, Float
 from pydantic import ConfigDict
 
-from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockConfig, RecurrentBlock, RecurrentState
 from modrax.network.block.gtrxl import GTrXLConfig
 from modrax.network.block.rnn import RNNConfig
+from modrax.network.block_network import BlockNetwork, BlockNetworkConfig
 from modrax.rollout.recurrent_rollout import RecurrentRolloutData
 from modrax.types import Shape
 
 RecurrentBlockConfig = RNNConfig | GTrXLConfig
 
 
-class RecurrentNetworkConfig(NetworkConfig):
+class RecurrentNetworkConfig(BlockNetworkConfig):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     encoders: dict[
-        str, tuple[type[Block], BlockConfig]
-    ]  # Mapping from input name to (BlockClass, BlockConfig)
+        str, tuple[type[Block], BlockConfig, Shape | None]
+    ]  # Mapping from input name to (BlockClass, BlockConfig, Shape). None = use obs_shape
     encoder_dim: int  # Output dimension for all encoders
+
+    trunk: None = None
+    trunk_dim: None = None
 
     recurrent: tuple[type[RecurrentBlock], BlockConfig]
     recurrent_dim: int
 
     heads: dict[
-        str, tuple[type[Block], BlockConfig]
-    ]  # Mapping output name to (BlockClass, BlockConfig)
+        str, tuple[type[Block], BlockConfig, int | None]
+    ]  # Mapping output name to (BlockClass, BlockConfig, output_dim). None = use num_actions
 
 
-class RecurrentNetwork(Network):
+class RecurrentNetwork(BlockNetwork):
     """Block-based recurrent network with encoder → recurrent → heads structure.
 
     Always includes a recurrent block (RNN or GTrXL) between encoder and head blocks.
@@ -51,49 +54,40 @@ class RecurrentNetwork(Network):
         >>> from modrax.network.block.linear import Linear, LinearConfig
         >>> from modrax.network.block.mlp import MLP, MLPConfig
         >>> from modrax.network.block.rnn import NnxRNN, RNNConfig
-        >>> import jax.nn as jnn
+        >>> from modrax.types import OBS_SHAPE, NUM_ACTIONS
         >>>
         >>> config = RecurrentNetworkConfig(
-        ...     encoders={"obs": (Linear, LinearConfig())},
+        ...     encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)), OBS_SHAPE)},
         ...     encoder_dim=128,
         ...     recurrent=(NnxRNN, RNNConfig(cell_type="lstm")),
         ...     recurrent_dim=256,
         ...     heads={
-        ...         "policy": (MLP, MLPConfig(hidden_dims=(32,), activation_fn=jnn.relu)),
-        ...         "value": (Linear, LinearConfig()),
+        ...         "policy": (MLP, MLPConfig(hidden_dims=(32,)), NUM_ACTIONS),
+        ...         "value": (Linear, LinearConfig(), 1),
         ...     },
         ... )
         >>> network = RecurrentNetwork(
-        ...     input_shapes={"obs": (4,)},
-        ...     output_dims={"policy": 4, "value": 1},
+        ...     obs_shape=(4,),
+        ...     num_actions=2,
         ...     config=config,
         ...     rngs=rngs,
         ... )
         >>> outputs, state = network({"obs": obs_batch}, recurrent_state)
-        >>> # outputs = {"policy": [B, 4], "value": [B, 1]}
+        >>> # outputs = {"policy": [B, 2], "value": [B, 1]}
     """
 
     def __init__(
         self,
-        input_shapes: dict[str, Shape | int],  # Dict mapping input names to shapes
-        output_dims: dict[str, int],  # Dict mapping head names to output dimensions
+        obs_shape: Shape,
+        num_actions: int,
         config: RecurrentNetworkConfig,
         rngs: nnx.Rngs,
     ):
-        # Build encoder block for each input
-        self.encoders = {
-            name: block_cls(
-                input_shape=input_shapes[name],
-                output_dim=config.encoder_dim,
-                config=block_config,
-                rngs=rngs,
-            )
-            for name, (block_cls, block_config) in config.encoders.items()
-        }
+        self.encoders = self.build_encoders(obs_shape, config, rngs)
 
         # Build recurrent block (takes concatenated encoders)
         recurrent_cls, recurrent_config = config.recurrent
-        recurrent_input_dim = len(input_shapes) * config.encoder_dim
+        recurrent_input_dim = len(self.encoders) * config.encoder_dim
         self.recurrent_block = recurrent_cls(
             input_shape=recurrent_input_dim,
             output_dim=config.recurrent_dim,
@@ -101,16 +95,7 @@ class RecurrentNetwork(Network):
             rngs=rngs,
         )
 
-        # Build head block for each output
-        self.heads = {
-            name: block_cls(
-                input_shape=config.recurrent_dim,
-                output_dim=output_dims[name],
-                config=block_config,
-                rngs=rngs,
-            )
-            for name, (block_cls, block_config) in config.heads.items()
-        }
+        self.heads = self.build_heads(num_actions, config.recurrent_dim, config, rngs)
 
     def init_recurrent_state(self, *args, **kwargs) -> Any:
         return self.recurrent_block.init_recurrent_state(*args, **kwargs)
@@ -123,10 +108,7 @@ class RecurrentNetwork(Network):
         inputs: dict[str, Float[Array, "B ..."]],
         recurrent_state: RecurrentState,
     ) -> tuple[dict[str, Array], Any]:
-        """
-        Forward pass for generation/rollout (single timestep).
-        Takes in previous recurrent tstate and updates recurrent state
-        """
+        """Forward pass for generation/rollout (single timestep)."""
         # Encode each input
         encoded = []
         for name in sorted(self.encoders.keys()):
