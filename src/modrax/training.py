@@ -46,6 +46,7 @@ class TrainConfig(BaseModel):
     num_epochs: int
     jit: bool = True
 
+    display_network: bool = False
     log_interval: int = 25
     save_path: str | None = None
 
@@ -64,6 +65,9 @@ def train(config: TrainConfig) -> Network:
         nnx.Rngs(network_key),
     )
     optimizer = Optimizer(config.optimizer_config, network)
+
+    if config.display_network:
+        nnx.display(network)
 
     rollout_fn = config.rollout_fn
     update_fn = config.update_fn
@@ -87,6 +91,7 @@ def train(config: TrainConfig) -> Network:
     for iteration in pbar:
         rollout_key, key = jax.random.split(key)
 
+        network.eval()
         env_state, recurrent_state, data = rollout_fn(
             network,
             config.policy_fn,
@@ -97,6 +102,7 @@ def train(config: TrainConfig) -> Network:
             rollout_key,
         )
 
+        network.train()
         for _ in range(config.num_epochs):
             update_key, key = jax.random.split(key)
             loss, infos = update_fn(

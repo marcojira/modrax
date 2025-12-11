@@ -187,7 +187,7 @@ class GatedTransformerXL(RecurrentBlock):
         )
 
         out, _ = self._forward(segment_encoded_obs, memory, mask)
-        return out
+        return out.reshape((encoded_obs.shape[0], encoded_obs.shape[1], -1))
 
 
 class TransformerLayer(nnx.Module):

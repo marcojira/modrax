@@ -16,11 +16,10 @@ def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> d
     )
     mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
 
+    infos = {k: info.mean().item() for k, info in infos.items()}
+
     all_metrics = {
-        "Loss": infos["total_loss"].mean().item(),
-        "Act.": infos["actor_loss"].mean().item(),
-        "Crit.": infos["critic_loss"].mean().item(),
-        "Ent.": infos["entropy"].mean().item(),
+        **infos,
         "Rew.": mean_traj_reward.item(),
         "Ep.Ret.": mean_ep_return.item(),
         "Ep.Len.": mean_ep_length.item(),
@@ -29,6 +28,6 @@ def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> d
     return all_metrics
 
 
-def format_metrics(metrics: dict[str, float], precision: int = 2) -> dict[str, str]:
+def format_metrics(metrics: dict[str, float], precision: int = 3) -> dict[str, str]:
     """Format numeric metrics as strings for display."""
     return {key: f"{value:.{precision}f}" for key, value in metrics.items()}
