@@ -1,6 +1,7 @@
 from typing import Any, NamedTuple
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Bool, Float, Int, Key
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from modrax.types import Shape
 
 class EnvConfig(BaseModel):
     env_name: str = ""
+    auto_reset: bool = True
 
 
 # Type alias for environment-specific state
@@ -94,45 +96,33 @@ class Env:
     def step_fn(
         self, state: StateWithMetrics, action: Float[Array, "..."], key: Key[Array, ""]
     ) -> tuple[StepOutput, StateWithMetrics]:
-        """Step environment with automatic return/length accumulation and auto-reset."""
-        # Convert to State for inner step
+        """Step environment with return/length accumulation and optional auto-reset."""
         inner_state = State(
             env_state=state.env_state,
             obs=state.obs,
             action_mask=state.action_mask,
         )
-
-        # Step WITHOUT auto-reset to get terminal state
         step_output, new_state = self._inner_step_fn(inner_state, action, key)
 
-        # Auto-reset if done: replace state with reset state
-        # but keep the terminal reward/done/info from step_output
-        def do_reset():
-            reset_state = self._inner_reset_fn(key)
-            return State(
-                env_state=reset_state.env_state,
-                obs=reset_state.obs,
-                action_mask=reset_state.action_mask,
+        if self.config.auto_reset:
+            new_state = jax.lax.cond(
+                step_output.done > 0,
+                lambda: self._inner_reset_fn(key),
+                lambda: new_state,
             )
+            episode_return = (state.episode_return + step_output.reward) * (1 - step_output.done)
+            episode_length = jnp.int32((state.episode_length + 1) * (1 - step_output.done))
+        else:
+            episode_return = state.episode_return + step_output.reward
+            episode_length = state.episode_length + 1
 
-        def no_reset():
-            return new_state
-
-        new_state = jax.lax.cond(
-            step_output.done > 0,
-            do_reset,
-            no_reset,
-        )
-
-        # Wrap back to StateWithMetrics with updated metrics
         new_state_with_metrics = StateWithMetrics(
             env_state=new_state.env_state,
             obs=new_state.obs,
             action_mask=new_state.action_mask,
-            episode_return=(state.episode_return + step_output.reward) * (1 - step_output.done),
-            episode_length=jax.numpy.int32((state.episode_length + 1) * (1 - step_output.done)),
+            episode_return=episode_return,
+            episode_length=episode_length,
         )
-
         return step_output, new_state_with_metrics
 
     def _setup_fns(self, jit: bool):

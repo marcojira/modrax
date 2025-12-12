@@ -11,11 +11,11 @@ from modrax.network import (
     RecurrentNetwork,
     RecurrentNetworkConfig,
 )
-from modrax.types import NUM_ACTIONS, OBS_SHAPE
 from modrax.optimizer import OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.rollout import RolloutConfig, recurrent_rollout
 from modrax.training import TrainConfig, train
+from modrax.types import NUM_ACTIONS, OBS_SHAPE
 from modrax.update import PPOConfig, ppo_update
 
 
