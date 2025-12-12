@@ -20,7 +20,7 @@ from modrax.update import PPOConfig, ppo_update
 
 
 def main():
-    env_config = CraftaxEnvConfig(env_name="Craftax-Symbolic-v1")
+    env_config = CraftaxEnvConfig(env_name="Craftax-Symbolic-v1", optimistic_reset=True)
 
     network_config = RecurrentNetworkConfig(
         encoders={"obs": (Linear, LinearConfig(), OBS_SHAPE)},

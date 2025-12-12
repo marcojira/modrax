@@ -1,4 +1,5 @@
 from typing import Any, NamedTuple
+from warnings import WarningMessage
 
 import jax
 import jax.numpy as jnp
@@ -12,6 +13,8 @@ from modrax.types import Shape
 class EnvConfig(BaseModel):
     env_name: str = ""
     auto_reset: bool = True
+    optimistic_reset: bool = False
+    num_reset_envs: int = 8  # number of resets to pre-compute per step
 
 
 # Type alias for environment-specific state
@@ -69,6 +72,10 @@ class Env:
             return super().__new__(cls)
 
     def __init__(self, config: EnvConfig, jit: bool = True):
+        if config.optimistic_reset and not config.auto_reset:
+            print("Optimistic resets require auto_reset=True. Proceeding with auto_resets")
+            self.config.auto_reset = True
+
         self.config = config
         self._setup_fns(jit=jit)
 
@@ -94,7 +101,11 @@ class Env:
         )
 
     def step_fn(
-        self, state: StateWithMetrics, action: Float[Array, "..."], key: Key[Array, ""]
+        self,
+        state: StateWithMetrics,
+        reset_state: StateWithMetrics,
+        action: Float[Array, "..."],
+        key: Key[Array, ""],
     ) -> tuple[StepOutput, StateWithMetrics]:
         """Step environment with return/length accumulation and optional auto-reset."""
         inner_state = State(
@@ -107,7 +118,11 @@ class Env:
         if self.config.auto_reset:
             new_state = jax.lax.cond(
                 step_output.done > 0,
-                lambda: self._inner_reset_fn(key),
+                lambda: State(
+                    env_state=reset_state.env_state,
+                    obs=reset_state.obs,
+                    action_mask=reset_state.action_mask,
+                ),
                 lambda: new_state,
             )
             episode_return = (state.episode_return + step_output.reward) * (1 - step_output.done)
@@ -130,12 +145,27 @@ class Env:
         reset_fn = jax.vmap(self.reset_fn)
         step_fn = jax.vmap(self.step_fn)
 
+        def batch_step(
+            state: StateWithMetrics, action: Float[Array, "B ..."], keys: Key[Array, " B"]
+        ) -> tuple[StepOutput, StateWithMetrics]:
+            if self.config.optimistic_reset:
+                num_resets = self.config.num_reset_envs
+                reset_keys = jax.random.split(keys[0], num_resets)
+                reset_state = jax.vmap(self.reset_fn)(reset_keys)
+
+                # Assign a reset state to each environment
+                indices = jax.vmap(lambda k: jax.random.choice(k, jnp.arange(num_resets)))(keys)
+                reset_state = jax.tree.map(lambda x: x[indices], reset_state)
+            else:
+                reset_state = self._reset_fn(keys) if self.config.auto_reset else state
+            return step_fn(state, reset_state, action, keys)
+
         if jit:
             reset_fn = jax.jit(reset_fn)
-            step_fn = jax.jit(step_fn)
+            batch_step = jax.jit(batch_step)
 
         self._reset_fn = reset_fn
-        self._step_fn = step_fn
+        self._step_fn = batch_step
 
     def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
         """Reset environments with given keys."""

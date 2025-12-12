@@ -25,7 +25,7 @@ def main():
 
     train_config = TrainConfig(
         # Environment suite/environment
-        env_config=PGXEnvConfig(env_name="minatar-asterix"),
+        env_config=PGXEnvConfig(env_name="minatar-asterix", optimistic_reset=False),
         # Network class and config
         network_cls=BlockNetwork,
         network_config=network_config,
