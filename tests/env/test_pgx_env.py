@@ -6,8 +6,8 @@ from helpers import run_env_test
 from modrax.env import Env, PGXEnvConfig
 
 TEST_ENVS = [
+    "tic_tac_toe",
     "minatar-asterix",
-    "minatar-breakout",
     "minatar-freeway",
 ]
 

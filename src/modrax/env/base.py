@@ -25,6 +25,7 @@ class State(NamedTuple):
     env_state: EnvState
     obs: Float[Array, "..."]
     action_mask: Bool[Array, "..."]
+    info: Any = None
 
 
 class StateWithMetrics(NamedTuple):
@@ -33,6 +34,7 @@ class StateWithMetrics(NamedTuple):
     env_state: EnvState
     obs: Float[Array, "..."]
     action_mask: Bool[Array, "..."]
+    info: Any
     episode_return: Float[Array, ""]
     episode_length: Int[Array, ""]
 
@@ -96,6 +98,7 @@ class Env:
             env_state=state.env_state,
             obs=state.obs,
             action_mask=state.action_mask,
+            info=state.info,
             episode_return=jax.numpy.zeros(()),
             episode_length=jax.numpy.zeros((), dtype=jax.numpy.int32),
         )
@@ -109,9 +112,7 @@ class Env:
     ) -> tuple[StepOutput, StateWithMetrics]:
         """Step environment with return/length accumulation and optional auto-reset."""
         inner_state = State(
-            env_state=state.env_state,
-            obs=state.obs,
-            action_mask=state.action_mask,
+            env_state=state.env_state, obs=state.obs, action_mask=state.action_mask, info=state.info
         )
         step_output, new_state = self._inner_step_fn(inner_state, action, key)
 
@@ -122,6 +123,7 @@ class Env:
                     env_state=reset_state.env_state,
                     obs=reset_state.obs,
                     action_mask=reset_state.action_mask,
+                    info=reset_state.info,
                 ),
                 lambda: new_state,
             )
@@ -135,6 +137,7 @@ class Env:
             env_state=new_state.env_state,
             obs=new_state.obs,
             action_mask=new_state.action_mask,
+            info=new_state.info,
             episode_return=episode_return,
             episode_length=episode_length,
         )

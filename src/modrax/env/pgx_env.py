@@ -7,6 +7,7 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from jaxtyping import Array, Key
+from pgx import make
 from pgx.minatar.asterix import MinAtarAsterix
 from pgx.minatar.breakout import MinAtarBreakout
 from pgx.minatar.freeway import MinAtarFreeway
@@ -15,29 +16,49 @@ from pgx.minatar.space_invaders import MinAtarSpaceInvaders
 
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
+MINATAR_ENV_MAP = {
+    "minatar-asterix": MinAtarAsterix,
+    "minatar-breakout": MinAtarBreakout,
+    "minatar-freeway": MinAtarFreeway,
+    "minatar-seaquest": MinAtarSeaquest,
+    "minatar-space_invaders": MinAtarSpaceInvaders,
+}
+
 
 class PGXEnvConfig(EnvConfig):
     env_name: Literal[
+        "2048",
+        "animal_shogi",
+        "backgammon",
+        "bridge_bidding",
+        "chess",
+        "connect_four",
+        "gardner_chess",
+        "go_9x9",
+        "go_19x19",
+        "hex",
+        "kuhn_poker",
+        "leduc_holdem",
         "minatar-asterix",
         "minatar-breakout",
         "minatar-freeway",
         "minatar-seaquest",
         "minatar-space_invaders",
+        "othello",
+        "shogi",
+        "sparrow_mahjong",
+        "tic_tac_toe",
     ] = "minatar-asterix"
     sticky_action_prob: float = 0.1
 
 
 class PGXEnv(Env):
     def __init__(self, config: PGXEnvConfig, jit: bool = True):
-        env_map = {
-            "minatar-asterix": MinAtarAsterix,
-            "minatar-breakout": MinAtarBreakout,
-            "minatar-freeway": MinAtarFreeway,
-            "minatar-seaquest": MinAtarSeaquest,
-            "minatar-space_invaders": MinAtarSpaceInvaders,
-        }
-        env_cls = env_map[config.env_name]
-        self._env = env_cls(sticky_action_prob=config.sticky_action_prob)
+        if config.env_name in MINATAR_ENV_MAP:
+            env_cls = MINATAR_ENV_MAP[config.env_name]
+            self._env = env_cls(sticky_action_prob=config.sticky_action_prob)
+        else:
+            self._env = make(config.env_name)
 
         self.obs_shape = self._env.observation_shape
         self.num_actions = self._env.num_actions
@@ -51,6 +72,7 @@ class PGXEnv(Env):
             env_state=pgx_state,
             obs=pgx_state.observation,
             action_mask=pgx_state.legal_action_mask.astype(jnp.bool),
+            info={"current_player": pgx_state.current_player},
         )
 
     def _inner_step_fn(
@@ -58,7 +80,11 @@ class PGXEnv(Env):
     ) -> tuple[StepOutput, State]:
         pgx_state = self._env.step(state.env_state, action, key)
 
-        reward = jnp.squeeze(pgx_state.rewards, -1)
+        if self.config.env_name in MINATAR_ENV_MAP:
+            reward = jnp.squeeze(pgx_state.rewards, -1)
+        else:
+            reward = pgx_state.rewards[0]  # Always give reward from first player's perspective
+
         done = pgx_state.terminated
 
         step_output = StepOutput(reward=reward, done=done.astype(jnp.bool), info={})
@@ -66,6 +92,7 @@ class PGXEnv(Env):
             env_state=pgx_state,
             obs=pgx_state.observation,
             action_mask=pgx_state.legal_action_mask.astype(jnp.bool),
+            info={"current_player": pgx_state.current_player},
         )
 
         return step_output, new_state
@@ -118,7 +145,11 @@ class PGXEnv(Env):
         """Render MinAtar environments from PGX."""
         # Modified from https://github.com/kenjyoung/MinAtar
         obs = state.env_state.observation
-        return self.render_obs(obs)
+
+        if self.config.env_name in MINATAR_ENV_MAP:
+            return self.render_obs(obs)
+        else:
+            return np.zeros((10, 10, 3))  # TODO: Implement visualization for board games
 
     @staticmethod
     def render_obs(obs: Array):
