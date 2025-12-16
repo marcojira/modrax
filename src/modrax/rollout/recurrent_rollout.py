@@ -49,6 +49,7 @@ def recurrent_rollout(
 
         trajectory = Trajectory(
             obs=obs,
+            info=env_state.info,
             actions=action,
             rewards=step_output.reward,
             action_masks=action_mask,

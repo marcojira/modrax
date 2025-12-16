@@ -15,6 +15,7 @@ class NetworkOutput(TypedDict):
 
 class Trajectory(NamedTuple):
     obs: Float[Array, "T B ..."]
+    info: Any
     actions: Float[Array, "T B ..."]
     rewards: Float[Array, "T B"]
     action_masks: Float[Array, "T B A"]
