@@ -116,8 +116,9 @@ class RecurrentNetwork(BlockNetwork):
             encoded.append(x)
 
         # Concatenate encoders
-        x = jnp.concatenate(encoded, axis=-1)  # [B, encoder_dim * num_inputs]
-        x = x[:, None, :]  # Add time dimension [B, 1, D]
+        encoded = jnp.concatenate(encoded, axis=-1)  # [B, encoder_dim * num_inputs]
+
+        x = encoded[:, None, :]  # Add time dimension [B, 1, D]
         x, recurrent_state = self.recurrent_block(x, recurrent_state)
         x = x.squeeze(1)  # Remove time dimension [B, D]
 
