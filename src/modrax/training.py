@@ -1,24 +1,53 @@
 """Training utilities for RL algorithms."""
 
 import os
+from typing import Any
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
+import jax.numpy as jnp
 from flax import nnx
 from pydantic import BaseModel, SkipValidation
 from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.eval import compute_training_metrics, format_metrics
+from modrax.eval import EvalFn
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.recurrent_network import RecurrentNetwork
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import PolicyFn
-from modrax.rollout.base import RolloutConfig, RolloutFn
+from modrax.rollout.base import RolloutConfig, RolloutFn, Trajectory
 from modrax.update.base import UpdateConfig, UpdateFn
 from modrax.utils import save_metrics_jsonl
+
+
+def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> dict[str, float]:
+    """Compute standard training metrics from trajectory and update infos."""
+    num_dones = jnp.sum(trajectory.dones)
+
+    mean_ep_return = jnp.sum(trajectory.episode_returns * trajectory.dones) / jnp.maximum(
+        num_dones, 1
+    )
+    mean_ep_length = jnp.sum(trajectory.episode_lengths * trajectory.dones) / jnp.maximum(
+        num_dones, 1
+    )
+    mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
+
+    infos = {k: info.mean().item() for k, info in infos.items()}
+
+    return {
+        **infos,
+        "Rew.": mean_traj_reward.item(),
+        "Ep.Ret.": mean_ep_return.item(),
+        "Ep.Len.": mean_ep_length.item(),
+    }
+
+
+def format_metrics(metrics: dict[str, float], precision: int = 3) -> dict[str, str]:
+    """Format numeric metrics as strings for display."""
+    return {key: f"{value:.{precision}f}" for key, value in metrics.items()}
 
 
 class TrainConfig(BaseModel):
@@ -40,6 +69,7 @@ class TrainConfig(BaseModel):
     update_config: SkipValidation[UpdateConfig]
 
     policy_fn: SkipValidation[PolicyFn]
+    eval_fn: SkipValidation[EvalFn] | None = None
 
     num_envs: int
     total_steps: int
@@ -113,8 +143,15 @@ def train(config: TrainConfig) -> Network:
                 update_key,
             )
 
-        # Logging
+        # Evaluation
         metrics = compute_training_metrics(data.trajectory, infos)
+        if config.eval_fn is not None:
+            eval_key, key = jax.random.split(key)
+            eval_metrics = config.eval_fn(network, data, eval_key)
+            metrics.update(eval_metrics)
+
+        # Logging
+
         metrics["iteration"] = iteration
         metrics["steps_M"] = (iteration * config.num_envs * config.rollout_config.num_steps) / 1e6
 
