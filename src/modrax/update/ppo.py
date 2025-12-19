@@ -34,7 +34,7 @@ def compute_gae_advantages(
 
         return (gae, val), gae
 
-    values = trajectory.network_output["value"].squeeze(-1)  # type: ignore
+    values = trajectory.network_output["value"].squeeze(-1)
 
     # Transpose to (T, B) for scan, then transpose back
     transitions = (trajectory.dones.T, values.T, trajectory.rewards.T)
@@ -126,7 +126,7 @@ def ppo_update(
     # Compute last value for GAE bootstrapping)
     advantages, returns = compute_gae_advantages(
         data.trajectory,
-        data.final_out["value"].squeeze(-1),  # type: ignore
+        data.final_out["value"].squeeze(-1),
         config,
     )
 

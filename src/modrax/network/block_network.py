@@ -25,7 +25,7 @@ class BlockNetworkConfig(NetworkConfig):
 
     heads: dict[
         str, tuple[type[Block], BlockConfig, int | None]
-    ]  # Mapping output name to (BlockClass, BlockConfig, output_dim). NUM_ACTIONS/None = use num_actions
+    ]  # Mapping output to (BlockClass, BlockConfig, output_dim). NUM_ACTIONS/None => num_actions
 
 
 class BlockNetwork(Network):
@@ -147,7 +147,7 @@ class BlockNetwork(Network):
 
         return outputs
 
-    def train_forward(self, data: RolloutData):
+    def train_forward(self, data: RolloutData) -> dict[str, Array]:
         """Forward pass for training with sequential data."""
 
         # Get shape from obs

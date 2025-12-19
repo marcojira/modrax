@@ -42,6 +42,23 @@ def make_trajectory_minibatches(all_data: dict, key: Key[Array, ""], minibatch_s
     return minibatches
 
 
+def make_transition_minibatches(all_data: dict, key: Key[Array, ""], minibatch_size: int):
+    """Create minibatches by flattening B x T, shuffling all transitions, then batching."""
+    flat_data = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), all_data)
+    num_samples = jax.tree.leaves(flat_data)[0].shape[0]
+
+    num_batches = num_samples // minibatch_size
+
+    permutation = jax.random.permutation(key, num_samples)
+    shuffled_data = jax.tree.map(
+        lambda x: x[permutation][: num_batches * minibatch_size], flat_data
+    )
+    minibatches = jax.tree.map(
+        lambda x: x.reshape(num_batches, minibatch_size, 1, *x.shape[1:]), shuffled_data
+    )  # Extra dimension to match train_forward requirements
+    return minibatches
+
+
 def update_network(
     network: Network, optimizer: Optimizer, minibatches: Any, loss_fn: Callable, config
 ):

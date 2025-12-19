@@ -41,9 +41,9 @@ def batch_obs(env):
 
 
 @pytest.fixture
-def network(env, rngs):
-    """Simple BlockNetwork for testing."""
-    config = BlockNetworkConfig(
+def block_network_cfg():
+    """Simple BlockNetwork config for testing."""
+    return BlockNetworkConfig(
         encoders={"obs": (MLP, MLPConfig(hidden_dims=(4,)), None)},
         encoder_dim=4,
         trunk=(MLP, MLPConfig(hidden_dims=(4,))),
@@ -53,10 +53,15 @@ def network(env, rngs):
             "value": (MLP, MLPConfig(hidden_dims=(4,)), 1),
         },
     )
+
+
+@pytest.fixture
+def network(env, rngs, block_network_cfg):
+    """Simple BlockNetwork for testing."""
     return BlockNetwork(
         obs_shape=env.obs_shape,
         num_actions=env.num_actions,
-        config=config,
+        config=block_network_cfg,
         rngs=rngs,
     )
 

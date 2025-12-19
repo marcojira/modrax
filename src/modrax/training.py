@@ -13,7 +13,7 @@ from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.eval import EvalFn
+from modrax.eval import EvalConfig, EvalFn
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.recurrent_network import RecurrentNetwork
 from modrax.optimizer import Optimizer, OptimizerConfig
@@ -69,7 +69,10 @@ class TrainConfig(BaseModel):
     update_config: SkipValidation[UpdateConfig]
 
     policy_fn: SkipValidation[PolicyFn]
+
+    eval_interval: int = 25
     eval_fn: SkipValidation[EvalFn] | None = None
+    eval_config: SkipValidation[EvalConfig] | None = None
 
     num_envs: int
     total_steps: int
@@ -145,13 +148,14 @@ def train(config: TrainConfig) -> Network:
 
         # Evaluation
         metrics = compute_training_metrics(data.trajectory, infos)
-        if config.eval_fn is not None:
-            eval_key, key = jax.random.split(key)
-            eval_metrics = config.eval_fn(network, data, eval_key)
-            metrics.update(eval_metrics)
+        if config.eval_fn is not None and config.eval_config is not None:
+            if iteration % config.eval_interval == 0:
+                network.eval()
+                eval_key, key = jax.random.split(key)
+                eval_metrics = config.eval_fn(network, env, data, config.eval_config, eval_key)
+                metrics.update(eval_metrics)
 
         # Logging
-
         metrics["iteration"] = iteration
         metrics["steps_M"] = (iteration * config.num_envs * config.rollout_config.num_steps) / 1e6
 

@@ -1,3 +1,4 @@
+from modrax.network.az_net import AZNet, AZNetConfig
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockBase, BlockConfig, RecurrentBlock, RecurrentState
 from modrax.network.block.gtrxl import GatedTransformerXL, GTrXLConfig, GTrXLRecurrentState
@@ -9,6 +10,8 @@ from modrax.network.block_network import BlockNetwork, BlockNetworkConfig
 from modrax.network.recurrent_network import RecurrentNetwork, RecurrentNetworkConfig
 
 __all__ = [
+    "AZNet",
+    "AZNetConfig",
     "Network",
     "NetworkConfig",
     "BlockNetwork",

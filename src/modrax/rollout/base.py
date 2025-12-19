@@ -9,8 +9,7 @@ class NetworkInput(TypedDict):
     obs: Float[Array, "B ..."]
 
 
-class NetworkOutput(TypedDict):
-    policy: Float[Array, "B A"]
+NetworkOutput = dict[str, Float[Array, "B ..."]]
 
 
 class Trajectory(NamedTuple):

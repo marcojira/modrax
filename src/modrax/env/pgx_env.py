@@ -72,18 +72,31 @@ class PGXEnv(Env):
             env_state=pgx_state,
             obs=pgx_state.observation,
             action_mask=pgx_state.legal_action_mask.astype(jnp.bool),
-            info={"current_player": pgx_state.current_player},
+            info={"current_player": pgx_state.current_player, "turn": 0},
         )
 
     def _inner_step_fn(
         self, state: State, action: Array, key: Key[Array, ""]
     ) -> tuple[StepOutput, State]:
+        step = state.env_state._step_count
         pgx_state = self._env.step(state.env_state, action, key)
 
         if self.config.env_name in MINATAR_ENV_MAP:
             reward = jnp.squeeze(pgx_state.rewards, -1)
         else:
-            reward = pgx_state.rewards[0]  # Always give reward from first player's perspective
+            # By default, pgx rewards are relative to current_player which is different from
+            # the player who's turn it is. We modify this to always return the reward of the player
+            # whose turn it is
+            player_turn = step % 2
+
+            # Whether current_player is aligned with the player whose turn it is
+            should_flip = pgx_state.current_player != (pgx_state._step_count % 2)
+
+            reward = jnp.where(
+                should_flip,
+                -pgx_state.rewards[player_turn],
+                pgx_state.rewards[player_turn],
+            )
 
         done = pgx_state.terminated
 
@@ -92,7 +105,7 @@ class PGXEnv(Env):
             env_state=pgx_state,
             obs=pgx_state.observation,
             action_mask=pgx_state.legal_action_mask.astype(jnp.bool),
-            info={"current_player": pgx_state.current_player},
+            info={"current_player": pgx_state.current_player, "turn": pgx_state._step_count},
         )
 
         return step_output, new_state
