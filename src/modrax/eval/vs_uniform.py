@@ -1,14 +1,16 @@
 """Evaluate a network against a uniform (random) opponent in two-player games."""
 
-from typing import Callable
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
+from flax import nnx
 from jaxtyping import Array, Key
 
 from modrax.env.base import Env, EnvConfig
 from modrax.eval.base import EvalConfig
 from modrax.network.base import Network
+from modrax.network.recurrent_network import RecurrentNetwork
 from modrax.policy import softmax_policy
 from modrax.rollout.base import RolloutData
 
@@ -19,53 +21,51 @@ class VsUniformConfig(EvalConfig):
 
 
 def play_games(
-    player_1: Callable,
-    player_2: Callable,
+    network_1: Network | Callable,
+    network_2: Network | Callable,
     env: Env,
     key: Key[Array, ""],
     num_games: int = 100,
 ) -> Array:
+    """Play games between two networks, returning outcomes from network_1's perspective."""
+
     def step(carry):
-        step, dones, outcomes, env_state, key = carry
+        (step_num, dones, outcomes, network_1, network_2, env_state, key) = carry
         obs = env_state.obs
         action_mask = env_state.action_mask
 
         key, action_key, env_key = jax.random.split(key, 3)
 
-        # Take action
-        action = jax.lax.select(
-            step % 2 == 0,
-            player_1(obs, action_mask, action_key),
-            player_2(obs, action_mask, action_key),
-        )
+        logits_1 = network_1({"obs": obs})["policy"]
+        logits_2 = network_2({"obs": obs})["policy"]
 
-        # Step
+        policy = jnp.where(step_num % 2 == 0, logits_1, logits_2)
+        action = softmax_policy(policy, action_mask, action_key)
+
+        # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])
         step_output, new_env_state = env.step(env_state, action, env_keys)
 
         # Get reward from first player's perspective
-        first_player_reward = jnp.where(step % 2 == 0, step_output.reward, -step_output.reward)
-        outcomes = jnp.where(
-            dones, outcomes, first_player_reward
-        )  # Only record reward if not already done
+        first_player_reward = jnp.where(step_num % 2 == 0, step_output.reward, -step_output.reward)
+        outcomes = jnp.where(dones, outcomes, first_player_reward)
         dones = jnp.logical_or(dones, step_output.done)
 
-        return (step + 1, dones, outcomes, new_env_state, key)
+        return (step_num + 1, dones, outcomes, network_1, network_2, new_env_state, key)
 
     key, reset_key = jax.random.split(key)
     env_state = env.reset(jax.random.split(reset_key, num_games))
     init = (
-        0,  # step
-        jnp.zeros(num_games, dtype=jnp.bool),  # dones
-        jnp.zeros(num_games),  # outcomes
+        0,
+        jnp.zeros(num_games, dtype=jnp.bool),
+        jnp.zeros(num_games),
+        network_1,
+        network_2,
         env_state,
         key,
     )
 
-    # Keep running while any is not done
-    final_step, final_dones, outcomes, _, _ = jax.lax.while_loop(
-        lambda x: jnp.any(~x[1]), step, init
-    )
+    _, _, outcomes, _, _, _, _ = nnx.while_loop(lambda x: jnp.any(~x[1]), step, init)
     return outcomes  # type: ignore
 
 
@@ -76,22 +76,20 @@ def eval_vs_uniform(
     config: VsUniformConfig,
     key: Key[Array, ""],
 ) -> dict[str, float]:
-    def network_player(obs, action_mask, action_key):
-        out = network({"obs": obs})
-        logits = out["policy"]
-        action = softmax_policy(logits, action_mask, action_key)
-        return action
+    class UniformNetwork(Network):
+        def __init__(self):
+            return
 
-    def uniform_player(obs, action_mask, action_key):
-        logits = jnp.zeros(action_mask.shape)
-        action = softmax_policy(logits, action_mask, action_key)
-        return action
+        def __call__(self, *args):
+            return {"policy": jnp.ones((config.num_games, env.num_actions))}
+
+    if isinstance(network, RecurrentNetwork):
+        network.set_recurrent_state(config.num_games)
 
     num_games = config.num_games
     key1, key2 = jax.random.split(key)
-    # outcomes = play_games(uniform_player, uniform_player, env, key1, num_games)
-    outcomes_as_p1 = play_games(network_player, uniform_player, env, key1, num_games)
-    outcomes_as_p2 = -play_games(uniform_player, network_player, env, key2, num_games)
+    outcomes_as_p1 = play_games(network, UniformNetwork(), env, key1, num_games)
+    outcomes_as_p2 = -play_games(UniformNetwork(), network, env, key2, num_games)
     outcomes = jnp.concatenate([outcomes_as_p1, outcomes_as_p2])
 
     total_games = 2 * num_games

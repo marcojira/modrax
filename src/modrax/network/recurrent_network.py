@@ -103,12 +103,24 @@ class RecurrentNetwork(BlockNetwork):
     def reset_recurrent_state(self, *args, **kwargs) -> Any:
         return self.recurrent_block.reset_recurrent_state(*args, **kwargs)
 
+    def set_recurrent_state(self, *args, **kwargs) -> Any:
+        self.recurrent_state = nnx.Cache(self.recurrent_block.init_recurrent_state(*args, **kwargs))
+
     def __call__(
         self,
         inputs: dict[str, Float[Array, "B ..."]],
-        recurrent_state: RecurrentState,
-    ) -> tuple[dict[str, Array], Any]:
-        """Forward pass for generation/rollout (single timestep)."""
+        recurrent_state: RecurrentState | None = None,
+    ) -> tuple[dict[str, Array], Any] | dict[str, Array]:
+        """
+        Forward pass for generation/rollout (single timestep).
+        Supports being called with/without recurrent state.
+        For the latter, the recurrent state is stored/updated in the network
+        """
+        if recurrent_state is None:
+            use_recurrent_state = self.recurrent_state.value
+        else:
+            use_recurrent_state = recurrent_state
+
         # Encode each input
         encoded = []
         for name in sorted(self.encoders.keys()):
@@ -119,13 +131,17 @@ class RecurrentNetwork(BlockNetwork):
         encoded = jnp.concatenate(encoded, axis=-1)  # [B, encoder_dim * num_inputs]
 
         x = encoded[:, None, :]  # Add time dimension [B, 1, D]
-        x, recurrent_state = self.recurrent_block(x, recurrent_state)
+        x, output_recurrent_state = self.recurrent_block(x, use_recurrent_state)
         x = x.squeeze(1)  # Remove time dimension [B, D]
 
         # Generate outputs for each head
         outputs = {name: head(x) for name, head in self.heads.items()}
 
-        return outputs, recurrent_state
+        if recurrent_state is None:
+            self.recurrent_state.value = output_recurrent_state
+            return outputs
+
+        return outputs, output_recurrent_state
 
     def train_forward(self, data: RecurrentRolloutData) -> dict[str, Array]:
         """Forward pass for training with sequential data."""

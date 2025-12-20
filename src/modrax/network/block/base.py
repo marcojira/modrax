@@ -91,3 +91,12 @@ class RecurrentBlock(BlockBase, ABC):
     def reset_recurrent_state(self, *args, **kwargs) -> RecurrentState:
         """Reset the recurrent state (with block-specific arguments)"""
         pass
+
+    @abstractmethod
+    def train_forward(
+        self,
+        encoded_obs: Float[Array, "B T D"],
+        recurrent_state: RecurrentState,
+        init_recurrent_state: RecurrentState,
+    ) -> dict[str, Array]:
+        pass

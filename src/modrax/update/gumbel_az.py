@@ -10,7 +10,7 @@ from modrax.optimizer import Optimizer
 from modrax.rollout.base import RolloutData, Trajectory
 from modrax.update.base import (
     UpdateConfig,
-    make_transition_minibatches,
+    make_trajectory_minibatches,
     update_network,
 )
 
@@ -107,6 +107,7 @@ def gumbel_az_update(
 
     all_data = {"data": data, "value_target": value_target, "policy_target": policy_target}
 
-    minibatches = make_transition_minibatches(all_data, key, config.minibatch_size)
+    # minibatches = make_transition_minibatches(all_data, key, config.minibatch_size)
+    minibatches = make_trajectory_minibatches(all_data, key, config.minibatch_size)
 
     return update_network(network, optimizer, minibatches, gumbel_az_loss, config)

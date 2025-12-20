@@ -55,6 +55,29 @@ def block_network_cfg():
     )
 
 
+@pytest.fixture(params=["gtrxl", "rnn"])
+def recurrent_network_cfg(request):
+    """Parametrized RecurrentNetwork config for testing (GTrXL and RNN)."""
+    recurrent_configs = {
+        "gtrxl": (
+            GatedTransformerXL,
+            GTrXLConfig(num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4),
+        ),
+        "rnn": (NnxRNN, RNNConfig(cell_type="lstm")),
+    }
+    hidden_dim = 8
+    return RecurrentNetworkConfig(
+        encoders={"obs": (MLP, MLPConfig(hidden_dims=(hidden_dim,)), None)},
+        encoder_dim=hidden_dim,
+        recurrent=recurrent_configs[request.param],
+        recurrent_dim=hidden_dim,
+        heads={
+            "policy": (MLP, MLPConfig(hidden_dims=(4,)), None),
+            "value": (MLP, MLPConfig(hidden_dims=(4,)), 1),
+        },
+    )
+
+
 @pytest.fixture
 def network(env, rngs, block_network_cfg):
     """Simple BlockNetwork for testing."""
@@ -78,31 +101,12 @@ def recurrent_optimizer(recurrent_network):
     return Optimizer(OptimizerConfig(), recurrent_network)
 
 
-@pytest.fixture(params=["gtrxl", "rnn"])
-def recurrent_network(request, env, rngs):
-    """Parametrized recurrent network fixture (GTrXL and RNN)."""
-    recurrent_configs = {
-        "gtrxl": (
-            GatedTransformerXL,
-            GTrXLConfig(num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4),
-        ),
-        "rnn": (NnxRNN, RNNConfig(cell_type="lstm")),
-    }
-
-    hidden_dim = 8
-    config = RecurrentNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(hidden_dim,)), None)},
-        encoder_dim=hidden_dim,
-        recurrent=recurrent_configs[request.param],
-        recurrent_dim=hidden_dim,
-        heads={
-            "policy": (MLP, MLPConfig(hidden_dims=(4,)), None),
-            "value": (MLP, MLPConfig(hidden_dims=(4,)), 1),
-        },
-    )
+@pytest.fixture
+def recurrent_network(env, rngs, recurrent_network_cfg):
+    """Simple RecurrentNetwork for testing."""
     return RecurrentNetwork(
         obs_shape=env.obs_shape,
         num_actions=env.num_actions,
-        config=config,
+        config=recurrent_network_cfg,
         rngs=rngs,
     )
