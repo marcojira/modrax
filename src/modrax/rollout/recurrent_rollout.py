@@ -1,4 +1,4 @@
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 import jax
 import jax.numpy as jnp
@@ -13,7 +13,7 @@ from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutConfig, Roll
 
 @struct.dataclass
 class RecurrentRolloutData(RolloutData):
-    recurrent_state: RecurrentState
+    recurrent_output: Any
     init_recurrent_state: RecurrentState
 
 
@@ -67,7 +67,7 @@ def recurrent_rollout(
                 memory=recurrent_state.memory[:, -1], mask=prev_recurrent_state.mask
             )
         else:
-            output_recurrent_state = prev_recurrent_state
+            output_recurrent_state = step_output.done
 
         return (network, new_env_state, recurrent_state), (trajectory, output_recurrent_state)
 
@@ -83,7 +83,7 @@ def recurrent_rollout(
             lambda x: jnp.swapaxes(x, 0, 1), trajectory
         ),  # Transpose to (B, T, ...),
         final_out=final_out,
-        recurrent_state=jax.tree.map(
+        recurrent_output=jax.tree.map(
             lambda x: jnp.swapaxes(x, 0, 1), output_recurrent_state
         ),  # Transpose to (B, T, ...),
         init_recurrent_state=recurrent_state,

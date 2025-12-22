@@ -63,7 +63,7 @@ def recurrent_network_cfg(request):
             GatedTransformerXL,
             GTrXLConfig(num_heads=2, num_layers=1, rollout_memory_len=4, segment_len=4),
         ),
-        "rnn": (NnxRNN, RNNConfig(cell_type="lstm")),
+        "rnn": (NnxRNN, RNNConfig(cell_type="lstm", num_layers=2)),
     }
     hidden_dim = 8
     return RecurrentNetworkConfig(

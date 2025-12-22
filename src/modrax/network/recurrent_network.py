@@ -164,7 +164,7 @@ class RecurrentNetwork(BlockNetwork):
         x = jnp.concatenate(encoded, axis=-1)  # [B, T, encoder_dim * num_inputs]
 
         # Recurrent processing
-        x = self.recurrent_block.train_forward(x, data.recurrent_state, data.init_recurrent_state)
+        x = self.recurrent_block.train_forward(x, data.recurrent_output, data.init_recurrent_state)
 
         # Flatten for heads, then unflatten results
         x = flatten(x)

@@ -7,14 +7,15 @@ from modrax.network.block.rnn import NnxRNN, RNNConfig, RNNRecurrentState
 
 
 @pytest.mark.parametrize("cell_type", ["lstm", "gru", "simple"])
-def test_rnn_init_and_call(rngs, cell_type):
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_rnn_init_and_call(rngs, cell_type, num_layers):
     """Test RNN init_recurrent_state and __call__."""
     input_dim = 16
     output_dim = 32
     batch_size = 4
     seq_len = 1
 
-    config = RNNConfig(cell_type=cell_type)
+    config = RNNConfig(cell_type=cell_type, num_layers=num_layers)
 
     rnn = NnxRNN(
         input_shape=input_dim,
