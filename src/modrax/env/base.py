@@ -1,5 +1,4 @@
 from typing import Any, NamedTuple
-from warnings import WarningMessage
 
 import jax
 import jax.numpy as jnp
@@ -8,7 +7,6 @@ from jaxtyping import Array, Bool, Float, Int, Key
 from pydantic import BaseModel
 
 from modrax.types import Shape
-from modrax.utils import pprint
 
 
 class EnvConfig(BaseModel):

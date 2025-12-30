@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import jax.numpy as jnp
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,6 +26,33 @@ def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
     rgb_array = np.frombuffer(buf, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
     plt.close(fig)
     return rgb_array
+
+
+def compute_training_metrics(trajectory: Any, infos: dict[str, Any]) -> dict[str, float]:
+    """Compute standard training metrics from trajectory and update infos."""
+    num_dones = jnp.sum(trajectory.dones)
+
+    mean_ep_return = jnp.sum(trajectory.episode_returns * trajectory.dones) / jnp.maximum(
+        num_dones, 1
+    )
+    mean_ep_length = jnp.sum(trajectory.episode_lengths * trajectory.dones) / jnp.maximum(
+        num_dones, 1
+    )
+    mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
+
+    infos = {k: info.mean().item() for k, info in infos.items()}
+
+    return {
+        **infos,
+        "Rew.": mean_traj_reward.item(),
+        "Ep.Ret.": mean_ep_return.item(),
+        "Ep.Len.": mean_ep_length.item(),
+    }
+
+
+def format_metrics(metrics: dict[str, float], precision: int = 3) -> dict[str, str]:
+    """Format numeric metrics as strings for display."""
+    return {key: f"{value:.{precision}f}" for key, value in metrics.items()}
 
 
 def pprint(d: dict[str, Any], ndigits: int = 3) -> None:
