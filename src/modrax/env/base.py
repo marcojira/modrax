@@ -8,6 +8,7 @@ from jaxtyping import Array, Bool, Float, Int, Key
 from pydantic import BaseModel
 
 from modrax.types import Shape
+from modrax.utils import pprint
 
 
 class EnvConfig(BaseModel):
@@ -193,3 +194,7 @@ class Env:
         Returns RGB image np.array of shape (H, W, 3) with dtype uint8
         """
         raise NotImplementedError("Subclasses must implement render")
+
+    def __hash__(self) -> int:
+        """Hash based on config."""
+        return hash(self.config.model_dump_json())

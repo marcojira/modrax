@@ -1,6 +1,6 @@
 """Evaluate a network against a uniform (random) opponent in two-player games."""
 
-from typing import Any, Callable
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
@@ -13,6 +13,16 @@ from modrax.network.base import Network
 from modrax.network.recurrent_network import RecurrentNetwork
 from modrax.policy import softmax_policy
 from modrax.rollout.base import RolloutData
+
+
+def compute_outcome_stats(outcomes: Array) -> dict[str, float]:
+    """Compute win/draw/loss rates from outcome array."""
+    total = len(outcomes)
+    return {
+        "win_rate": float(jnp.sum(outcomes > 0) / total),
+        "draw_rate": float(jnp.sum(outcomes == 0) / total),
+        "loss_rate": float(jnp.sum(outcomes < 0) / total),
+    }
 
 
 class VsUniformConfig(EvalConfig):
@@ -69,6 +79,26 @@ def play_games(
     return outcomes  # type: ignore
 
 
+@nnx.jit(static_argnames=("env", "num_games"))
+def play_games_both_sides(
+    network: Network | Callable,
+    opponent: Network | Callable,
+    env: Env,
+    key: Key[Array, ""],
+    num_games: int,
+) -> Array:
+    """Play games as both P1 and P2, returning combined outcomes from network's perspective."""
+    if isinstance(network, RecurrentNetwork):
+        network.set_recurrent_state(num_games)
+    if isinstance(opponent, RecurrentNetwork):
+        opponent.set_recurrent_state(num_games)
+
+    key1, key2 = jax.random.split(key)
+    outcomes_as_p1 = play_games(network, opponent, env, key1, num_games)
+    outcomes_as_p2 = -play_games(opponent, network, env, key2, num_games)
+    return jnp.concatenate([outcomes_as_p1, outcomes_as_p2])
+
+
 def eval_vs_uniform(
     network: Network,
     env: Env,
@@ -83,22 +113,5 @@ def eval_vs_uniform(
         def __call__(self, *args):
             return {"policy": jnp.ones((config.num_games, env.num_actions))}
 
-    if isinstance(network, RecurrentNetwork):
-        network.set_recurrent_state(config.num_games)
-
-    num_games = config.num_games
-    key1, key2 = jax.random.split(key)
-    outcomes_as_p1 = play_games(network, UniformNetwork(), env, key1, num_games)
-    outcomes_as_p2 = -play_games(UniformNetwork(), network, env, key2, num_games)
-    outcomes = jnp.concatenate([outcomes_as_p1, outcomes_as_p2])
-
-    total_games = 2 * num_games
-    wins = jnp.sum(outcomes > 0)
-    draws = jnp.sum(outcomes == 0)
-    losses = jnp.sum(outcomes < 0)
-
-    return {
-        "win_rate": float(wins / total_games),
-        "draw_rate": float(draws / total_games),
-        "loss_rate": float(losses / total_games),
-    }
+    outcomes = play_games_both_sides(network, UniformNetwork(), env, key, config.num_games)
+    return compute_outcome_stats(outcomes)

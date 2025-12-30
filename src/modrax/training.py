@@ -20,7 +20,7 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import PolicyFn
 from modrax.rollout.base import RolloutConfig, RolloutFn, Trajectory
 from modrax.update.base import UpdateConfig, UpdateFn
-from modrax.utils import save_metrics_jsonl
+from modrax.utils import pprint, save_metrics_jsonl
 
 
 def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> dict[str, float]:
@@ -80,7 +80,6 @@ class TrainConfig(BaseModel):
     jit: bool = True
 
     display_network: bool = False
-    log_interval: int = 25
     save_path: str | None = None
 
 
@@ -146,27 +145,30 @@ def train(config: TrainConfig) -> Network:
                 update_key,
             )
 
-        # Evaluation
+        # Metrics
         metrics = compute_training_metrics(data.trajectory, infos)
-        if config.eval_fn is not None and config.eval_config is not None:
-            if iteration % config.eval_interval == 0:
-                network.eval()
-                eval_key, key = jax.random.split(key)
-                eval_metrics = config.eval_fn(network, env, data, config.eval_config, eval_key)
-                metrics.update(eval_metrics)
-
-        # Logging
         metrics["iteration"] = iteration
         metrics["steps_M"] = (iteration * config.num_envs * config.rollout_config.num_steps) / 1e6
-
         formatted_metrics = format_metrics(metrics)
         pbar.set_postfix(formatted_metrics)
-        if iteration % config.log_interval == 0:
-            print(formatted_metrics)
 
         if config.save_path is not None:
             save_metrics_jsonl(metrics, os.path.join(config.save_path, "metrics.jsonl"))
 
+        # Evaluation
+        if iteration % config.eval_interval == 0:
+            pprint(metrics)  # Print current metrics
+
+            if config.eval_fn is not None and config.eval_config is not None:
+                network.eval()
+                eval_key, key = jax.random.split(key)
+                eval_metrics = config.eval_fn(network, env, data, config.eval_config, eval_key)
+
+                pprint(eval_metrics)
+                if config.save_path is not None:
+                    save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
+
+    # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
         network.save(checkpoint_path)

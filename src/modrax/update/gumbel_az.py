@@ -20,6 +20,7 @@ class GumbelAZConfig(UpdateConfig):
 
     minibatch_size: int = 32
     sigma_fn: Callable[[Float[Array, "B T A"]], Float[Array, "B T A"]] = lambda x: 5 * x
+    loss: str = "KL"
 
 
 def compute_value_target(trajectory: Trajectory) -> Float[Array, "B T"]:
@@ -76,13 +77,19 @@ def compute_policy_target(data: RolloutData, config: GumbelAZConfig):
 
 def gumbel_az_loss(network: Network, minibatch, config: GumbelAZConfig):
     out = network.train_forward(minibatch["data"])
-    # log_policy = jax.nn.log_softmax(out["policy"], axis=-1)
-    # policy_loss = jnp.where(
-    #     minibatch["policy_target"] > 1e-8,
-    #     minibatch["policy_target"] * (jnp.log(minibatch["policy_target"]) - log_policy),
-    #     0,
-    # )
-    policy_loss = optax.softmax_cross_entropy(out["policy"], minibatch["policy_target"])
+
+    action_masks = minibatch["data"].trajectory.action_masks
+
+    if config.loss == "KL":
+        log_policy = jax.nn.log_softmax(out["policy"], axis=-1)
+        policy_loss = jnp.where(
+            minibatch["policy_target"] > 1e-8,
+            minibatch["policy_target"] * (jnp.log(minibatch["policy_target"]) - log_policy),
+            0,
+        )
+    elif config.loss == "CE":
+        policy_loss = -jax.nn.log_softmax(out["policy"], axis=-1) * minibatch["policy_target"]
+        policy_loss = jnp.where(action_masks, policy_loss, 0)
     policy_loss = jnp.sum(policy_loss, axis=-1)  # type: ignore
     policy_loss = policy_loss.mean()
 

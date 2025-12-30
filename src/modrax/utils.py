@@ -7,6 +7,7 @@ from typing import Any
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
+from rich import print
 
 
 def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
@@ -24,6 +25,21 @@ def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
     rgb_array = np.frombuffer(buf, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
     plt.close(fig)
     return rgb_array
+
+
+def pprint(d: dict[str, Any], ndigits: int = 3) -> None:
+    """Pretty print a nested dict with formatted float leaves."""
+
+    def format_value(value: Any):
+        if isinstance(value, dict):
+            return {k: format_value(v) for k, v in value.items()}
+        elif isinstance(value, float) or isinstance(value, int):
+            return round(value, ndigits)
+        else:
+            return str(value)
+
+    print(format_value(d))
+    return
 
 
 def save_metrics_jsonl(metrics: dict[str, Any], save_path: str) -> None:

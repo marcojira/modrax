@@ -27,7 +27,6 @@ def main():
         eval_fn=eval_vs_uniform,  # type: ignore
         eval_config=VsUniformConfig(env_config=env_config, num_games=1024),
         eval_interval=25,
-        log_interval=25,
         seed=0,
         num_envs=1024,
         total_steps=250_000_000,
