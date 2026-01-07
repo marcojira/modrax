@@ -44,17 +44,15 @@ def make_trajectory_minibatches(all_data: dict, key: Key[Array, ""], minibatch_s
 
 def make_transition_minibatches(all_data: dict, key: Key[Array, ""], minibatch_size: int):
     """Create minibatches by flattening B x T, shuffling all transitions, then batching."""
-    flat_data = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), all_data)
-    num_samples = jax.tree.leaves(flat_data)[0].shape[0]
+    # flat_data = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), all_data)
+    num_samples = jax.tree.leaves(all_data)[0].shape[0]
 
     num_batches = num_samples // minibatch_size
 
     permutation = jax.random.permutation(key, num_samples)
-    shuffled_data = jax.tree.map(
-        lambda x: x[permutation][: num_batches * minibatch_size], flat_data
-    )
+    shuffled_data = jax.tree.map(lambda x: x[permutation][: num_batches * minibatch_size], all_data)
     minibatches = jax.tree.map(
-        lambda x: x.reshape(num_batches, minibatch_size, 1, *x.shape[1:]), shuffled_data
+        lambda x: x.reshape(num_batches, minibatch_size, *x.shape[1:]), shuffled_data
     )  # Extra dimension to match train_forward requirements
     return minibatches
 
@@ -83,3 +81,6 @@ def update_network(
     # Update objects after training
     nnx.update((network, optimizer), graph_state[-1])
     return loss, infos
+
+
+jit_update_network = nnx.jit(update_network, static_argnames=["loss_fn", "config"])

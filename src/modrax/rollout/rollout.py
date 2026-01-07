@@ -7,7 +7,7 @@ from jaxtyping import Array, Key
 
 from modrax.env import StateWithMetrics
 from modrax.policy import PolicyFn
-from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutConfig, RolloutData, Trajectory
+from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutData, Trajectory
 
 
 class ForwardNetwork(Protocol):
@@ -20,7 +20,7 @@ def rollout(
     step_fn: Callable,
     env_state: StateWithMetrics,
     recurrent_state: None,
-    config: RolloutConfig,
+    num_steps: int,
     key: Key[Array, ""],
 ) -> tuple[StateWithMetrics, None, RolloutData]:
     def step(carry, step_key):
@@ -53,7 +53,7 @@ def rollout(
 
         return (network, new_env_state), trajectory
 
-    step_keys = jax.random.split(key, config.num_steps)
+    step_keys = jax.random.split(key, num_steps)
     (_, final_env_state), trajectory = nnx.scan(step)((network, env_state), step_keys)
 
     final_out = network({"obs": final_env_state.obs})
@@ -66,3 +66,6 @@ def rollout(
     )
 
     return final_env_state, None, data
+
+
+jit_rollout = nnx.jit(rollout, static_argnames=["policy_fn", "step_fn", "num_steps"])

@@ -42,6 +42,7 @@ class Optimizer(nnx.Optimizer):
 
         # Does a first update using the optimizer (seems to initialize the optimizer state?)
         # This prevents many functions from needing to be compiled twice
+
         # Only use parameters (nnx.Param), not RNG state or other non-trainable state
         _, params, _ = nnx.split(network, nnx.Param, ...)
         self.update(jax.tree.map(jnp.zeros_like, params))

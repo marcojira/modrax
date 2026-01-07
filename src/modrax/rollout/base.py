@@ -30,11 +30,6 @@ class RolloutData:
     final_out: NetworkOutput
 
 
-class RolloutConfig(BaseModel):
-    model_config = {"frozen": True}
-    num_steps: int = 128
-
-
 class RolloutFn(Protocol):
     def __call__(
         self,
@@ -43,6 +38,6 @@ class RolloutFn(Protocol):
         step_fn: Callable,
         env_state: Any,
         recurrent_state: Any,
-        config: RolloutConfig,
+        num_steps: int,
         key: Key[Array, ""],
     ) -> tuple[Any, Any | None, RolloutData]: ...

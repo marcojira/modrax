@@ -1,13 +1,11 @@
 """Train PPO on MinAtar (250M steps, ~100s on an L40s)"""
 
+from modrax.alg.ppo import PPOAlg, PPOConfig
 from modrax.env import PGXEnvConfig
 from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
 from modrax.optimizer import OptimizerConfig
-from modrax.policy import softmax_policy
-from modrax.rollout import RolloutConfig, rollout
 from modrax.training import TrainConfig, train
 from modrax.types import NUM_ACTIONS, OBS_SHAPE
-from modrax.update import PPOConfig, ppo_update
 
 
 def main():
@@ -30,14 +28,12 @@ def main():
         network_cls=BlockNetwork,
         network_config=network_config,
         optimizer_config=OptimizerConfig(learning_rate=3e-4, gradient_clip=0.5),
-        # Specify rollout function/config
-        rollout_fn=rollout,
-        rollout_config=RolloutConfig(num_steps=128),
-        # Specify network update function and config
-        update_fn=ppo_update,
-        update_config=PPOConfig(minibatch_size=128),
-        # Specify policy function used for rollout
-        policy_fn=softmax_policy,
+        # Specify algorithm class and config
+        alg_cls=PPOAlg,
+        alg_config=PPOConfig(
+            num_gen_steps=128,
+            minibatch_size=128,
+        ),
         # Training parameters
         seed=0,
         num_envs=4096,

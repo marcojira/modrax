@@ -8,7 +8,7 @@ from jaxtyping import Array, Key
 from modrax.env import StateWithMetrics
 from modrax.network.block.base import RecurrentState
 from modrax.network.block.gtrxl import GTrXLRecurrentState
-from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutConfig, RolloutData, Trajectory
+from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutData, Trajectory
 
 
 @struct.dataclass
@@ -29,7 +29,7 @@ def recurrent_rollout(
     step_fn: Callable,
     env_state: StateWithMetrics,
     recurrent_state: RecurrentState,
-    config: RolloutConfig,
+    num_steps: int,
     key: Key[Array, ""],
 ) -> tuple[StateWithMetrics, RecurrentState, RecurrentRolloutData]:
     def step(carry, step_key):
@@ -71,7 +71,7 @@ def recurrent_rollout(
 
         return (network, new_env_state, recurrent_state), (trajectory, output_recurrent_state)
 
-    step_keys = jax.random.split(key, config.num_steps)
+    step_keys = jax.random.split(key, num_steps)
     (_, final_env_state, final_recurrent_state), (trajectory, output_recurrent_state) = nnx.scan(
         step,
     )((network, env_state, recurrent_state), step_keys)
@@ -90,3 +90,8 @@ def recurrent_rollout(
     )
 
     return final_env_state, final_recurrent_state, data
+
+
+jit_recurrent_rollout = nnx.jit(
+    recurrent_rollout, static_argnames=["policy_fn", "step_fn", "num_steps"]
+)
