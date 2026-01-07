@@ -28,7 +28,7 @@ def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
     return rgb_array
 
 
-def compute_training_metrics(trajectory: Any, infos: dict[str, Any]) -> dict[str, float]:
+def compute_training_metrics(trajectory: Any) -> dict[str, float]:
     """Compute standard training metrics from trajectory and update infos."""
     num_dones = jnp.sum(trajectory.dones)
 
@@ -40,19 +40,27 @@ def compute_training_metrics(trajectory: Any, infos: dict[str, Any]) -> dict[str
     )
     mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
 
-    infos = {k: info.mean().item() for k, info in infos.items()}
-
     return {
-        **infos,
         "Rew.": mean_traj_reward.item(),
         "Ep.Ret.": mean_ep_return.item(),
         "Ep.Len.": mean_ep_length.item(),
     }
 
 
-def format_metrics(metrics: dict[str, float], precision: int = 3) -> dict[str, str]:
+def to_python_float(value: Any, ndigits: int = 4) -> float:
+    """Convert value to Python float, handling JAX arrays."""
+    if hasattr(value, "mean"):
+        return round(float(value.mean().item()), ndigits)
+    return round(float(value), ndigits)
+
+
+def format_metrics(metrics: dict[str, Any], precision: int = 3) -> dict[str, str]:
     """Format numeric metrics as strings for display."""
-    return {key: f"{value:.{precision}f}" for key, value in metrics.items()}
+    formatted = {}
+    for key, value in metrics.items():
+        value = to_python_float(value, precision)
+        formatted[key] = value
+    return formatted
 
 
 def pprint(d: dict[str, Any], ndigits: int = 3) -> None:

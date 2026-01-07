@@ -13,6 +13,7 @@ from modrax.rollout import RolloutData, Trajectory
 from modrax.rollout.recurrent_rollout import jit_recurrent_rollout, recurrent_rollout
 from modrax.rollout.rollout import jit_rollout, rollout
 from modrax.update.base import make_trajectory_minibatches, update_network
+from modrax.utils import compute_training_metrics
 
 
 class PPOConfig(AlgConfig):
@@ -24,6 +25,7 @@ class PPOConfig(AlgConfig):
     value_coeff: float = 0.5
     entropy_coeff: float = 0.01
     minibatch_size: int = 4096
+    num_epochs: int = 3
 
 
 """ HELPERS """
@@ -184,6 +186,13 @@ class PPOAlg(Alg):
         )
         self.env_state, self.recurrent_state = env_state, recurrent_state
 
-        loss, infos = self.update_fn(network, optimizer, data, self.config, update_key)
+        # Run multiple epochs of updates
+        epoch_keys = jax.random.split(update_key, self.config.num_epochs)
+        for epoch_key in epoch_keys:
+            _, infos = self.update_fn(network, optimizer, data, self.config, epoch_key)
 
-        return network, optimizer, infos
+        # Compute training metrics from trajectory and combine with loss info from last epoch
+        metrics = compute_training_metrics(data.trajectory)
+        metrics.update(infos)
+
+        return network, optimizer, metrics

@@ -102,7 +102,6 @@ def play_games_both_sides(
 def eval_vs_uniform(
     network: Network,
     env: Env,
-    rollout_data: RolloutData,
     config: VsUniformConfig,
     key: Key[Array, ""],
 ) -> dict[str, float]:

@@ -33,12 +33,12 @@ def main():
         alg_config=PPOConfig(
             num_gen_steps=128,
             minibatch_size=128,
+            num_epochs=3,
         ),
         # Training parameters
         seed=0,
         num_envs=4096,
         total_steps=250_000_000,
-        num_epochs=3,
         jit=True,
         # Save location
         save_path="out/examples/minatar-asterix",

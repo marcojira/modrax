@@ -1,7 +1,6 @@
 """Training utilities for RL algorithms."""
 
 import os
-from typing import Any
 
 from modrax.alg.base import Alg, AlgConfig
 
@@ -18,10 +17,7 @@ from modrax.eval import EvalConfig, EvalFn
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.recurrent_network import RecurrentNetwork
 from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.policy import PolicyFn
-from modrax.rollout.base import RolloutFn
-from modrax.update.base import UpdateConfig, UpdateFn
-from modrax.utils import compute_training_metrics, format_metrics, pprint, save_metrics_jsonl
+from modrax.utils import format_metrics, pprint, save_metrics_jsonl
 
 
 class TrainConfig(BaseModel):
@@ -45,7 +41,6 @@ class TrainConfig(BaseModel):
 
     num_envs: int
     total_steps: int
-    num_epochs: int
     jit: bool = True
 
     display_network: bool = False
@@ -88,30 +83,29 @@ def train(config: TrainConfig) -> Network:
         key, iteration_key = jax.random.split(key)
 
         network.train()
-        network, optimizer, infos = alg(network, optimizer, iteration_key)
+        network, optimizer, metrics = alg(network, optimizer, iteration_key)
 
-        # # Metrics
-        # metrics = compute_training_metrics(data.trajectory, infos)
-        # metrics["iteration"] = iteration
-        # metrics["steps_M"] = (iteration * config.num_envs * config.rollout_config.num_steps) / 1e6
-        # formatted_metrics = format_metrics(metrics)
-        # pbar.set_postfix(formatted_metrics)
+        # Metrics
+        metrics["iteration"] = iteration
+        metrics["steps_M"] = (iteration * config.num_envs * config.alg_config.num_gen_steps) / 1e6
+        formatted_metrics = format_metrics(metrics)
+        pbar.set_postfix(formatted_metrics)
 
-        # if config.save_path is not None:
-        #     save_metrics_jsonl(metrics, os.path.join(config.save_path, "metrics.jsonl"))
+        if config.save_path is not None:
+            save_metrics_jsonl(formatted_metrics, os.path.join(config.save_path, "metrics.jsonl"))
 
         # Evaluation
-        # if iteration % config.eval_interval == 0:
-        #     # pprint(metrics)  # Print current metrics
+        if iteration % config.eval_interval == 0:
+            pprint(formatted_metrics)  # Print current metrics
 
-        #     if config.eval_fn is not None and config.eval_config is not None:
-        #         network.eval()
-        #         eval_key, key = jax.random.split(key)
-        #         eval_metrics = config.eval_fn(network, env, data, config.eval_config, eval_key)
+            if config.eval_fn is not None and config.eval_config is not None:
+                network.eval()
+                eval_key, key = jax.random.split(key)
+                eval_metrics = config.eval_fn(network, env, config.eval_config, eval_key)
 
-        #         pprint(eval_metrics)
-        #         if config.save_path is not None:
-        #             save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
+                pprint(eval_metrics)
+                if config.save_path is not None:
+                    save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
 
     # Save checkpoint
     if config.save_path is not None:
