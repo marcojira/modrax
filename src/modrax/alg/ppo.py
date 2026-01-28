@@ -152,6 +152,8 @@ class PPOAlg(Alg):
         self,
         env_state: EnvState,
         recurrent_state: RecurrentState | None,
+        network: Network,
+        optimizer: Optimizer,
         env: Env,
         alg_config: PPOConfig,
         jit: bool = False,

@@ -1,6 +1,7 @@
 from modrax.network.az_net import AZNet, AZNetConfig
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.block.base import Block, BlockBase, BlockConfig, RecurrentBlock, RecurrentState
+from modrax.network.block.cnn import CNN, CNNConfig
 from modrax.network.block.gtrxl import GatedTransformerXL, GTrXLConfig, GTrXLRecurrentState
 from modrax.network.block.impala_cnn import ImpalaCNN, ImpalaCNNConfig
 from modrax.network.block.linear import Linear, LinearConfig
@@ -23,6 +24,8 @@ __all__ = [
     "BlockConfig",
     "RecurrentBlock",
     "RecurrentState",
+    "CNN",
+    "CNNConfig",
     "GatedTransformerXL",
     "GTrXLConfig",
     "GTrXLRecurrentState",

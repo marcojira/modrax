@@ -19,7 +19,7 @@ def test_eval_vs_uniform(rng_key, rngs, block_network_cfg):
     )
 
     config = VsUniformConfig(env_config=env_config, num_games=20)
-    results = eval_vs_uniform(network, env, None, config, rng_key)  # type: ignore
+    results = eval_vs_uniform(network, env, config, rng_key)  # type: ignore
 
     assert 0.0 <= results["win_rate"] <= 1.0
     assert 0.0 <= results["draw_rate"] <= 1.0
@@ -40,7 +40,7 @@ def test_eval_vs_uniform_recurrent(rng_key, rngs, recurrent_network_cfg):
     )
 
     eval_config = VsUniformConfig(env_config=env_config, num_games=20)
-    results = eval_vs_uniform(network, env, None, eval_config, rng_key)  # type: ignore
+    results = eval_vs_uniform(network, env, eval_config, rng_key)  # type: ignore
 
     assert 0.0 <= results["win_rate"] <= 1.0
     assert 0.0 <= results["draw_rate"] <= 1.0

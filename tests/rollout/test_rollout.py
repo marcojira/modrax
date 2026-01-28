@@ -1,7 +1,6 @@
 import jax
 
 from modrax.policy import softmax_policy
-from modrax.rollout.base import RolloutConfig
 from modrax.rollout.rollout import rollout
 
 
@@ -20,7 +19,7 @@ def test_rollout(env, network):
         step_fn=env.step,
         env_state=env_state,
         recurrent_state=None,
-        config=RolloutConfig(num_steps=num_steps),
+        num_steps=num_steps,
         key=rollout_key,
     )
     assert recurrent_state is None

@@ -1,44 +1,36 @@
 """Train MRQ on MinAtar."""
 
-from modrax.alg.mrq import MRQAlg, MRQConfig, MRQNetwork, MRQNetworkConfig
+import jax
+
+from modrax.alg.mrq import MRQAlg, MRQConfig, MRQNetwork, MRQNetworkConfig, mrq_policy
 from modrax.env import PGXEnvConfig
-from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
+from modrax.eval.rollout_return import RolloutReturnConfig, rollout_return
 from modrax.optimizer import OptimizerConfig
-from modrax.policy import softmax_policy
-from modrax.rollout import RolloutConfig, rollout
+from modrax.rollout.rollout import rollout
 from modrax.training import TrainConfig, train
-from modrax.types import NUM_ACTIONS, OBS_SHAPE
 
 
 def main():
-    # Encoder configuration
-    encoder_config = BlockNetworkConfig(
-        encoders={"obs": (MLP, MLPConfig(hidden_dims=(128,)), OBS_SHAPE)},
-        encoder_dim=64,
-        trunk=(Linear, LinearConfig()),
-        trunk_dim=32,
-        heads={"state_encoding": (Linear, LinearConfig(), 64)},
-    )
-
-    # MRQ network configuration
     network_config = MRQNetworkConfig(
-        encoder_cls=BlockNetwork,
-        encoder_config=encoder_config,
-        action_dim=32,
-        state_action_encoder_config=MLPConfig(hidden_dims=(128, 128)),
-        state_action_dim=64,
-        value_config=MLPConfig(hidden_dims=(128, 128)),
-        policy_config=MLPConfig(hidden_dims=(64, 64)),
+        pixel_obs=True,
+        zs_dim=512,
+        za_dim=256,
+        zsa_dim=512,
+        enc_hdim=512,
+        value_hdim=512,
+        policy_hdim=512,
+        enc_activation=jax.nn.elu,
+        value_activation=jax.nn.elu,
+        policy_activation=jax.nn.relu,
+        num_bins=65,
     )
 
     mrq_config = MRQConfig(
-        rollout_fn=rollout,
-        rollout_config=RolloutConfig(num_steps=128),
-        policy_fn=softmax_policy,
-        buffer_size=100_000,
-        minibatch_size=512,
-        encoder_horizon=4,
-        reward_horizon=4,
+        buffer_size=1_000_000,
+        minibatch_size=256,
+        encoder_horizon=5,
+        reward_horizon=3,
+        num_gen_steps=256,
     )
 
     train_config = TrainConfig(
@@ -47,15 +39,18 @@ def main():
         # Network class and config
         network_cls=MRQNetwork,
         network_config=network_config,
-        optimizer_config=OptimizerConfig(learning_rate=3e-4, gradient_clip=0.5),
+        optimizer_config=OptimizerConfig(learning_rate=3e-4, gradient_clip=100),
         # Algorithm
-        alg=MRQAlg,
+        alg_cls=MRQAlg,
         alg_config=mrq_config,
+        # Eval
+        eval_interval=25,
+        eval_fn=rollout_return,
+        eval_config=RolloutReturnConfig(rollout_fn=rollout, policy_fn=mrq_policy),
         # Training parameters
         seed=0,
-        num_envs=4096,
+        num_envs=1,
         total_steps=250_000_000,
-        num_epochs=1,
         jit=True,
         # Save location
         save_path="out/examples/mrq-minatar-asterix",

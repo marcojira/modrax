@@ -18,18 +18,25 @@ class MLP(nnx.Module):
         output_dim: int,
         activation_fn: Callable,
         rngs: nnx.Rngs,
+        use_layer_norm: bool = False,
     ):
         self.input_dim = input_shape if isinstance(input_shape, int) else math.prod(input_shape)
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
         self.activation_fn = activation_fn
+        self.use_layer_norm = use_layer_norm
 
         # Build layers
         self.layers = []
+        self.layer_norms = []
         layer_sizes = [self.input_dim] + list(self.hidden_dims)
 
         for i in range(len(layer_sizes) - 1):
             self.layers.append(nnx.Linear(layer_sizes[i], layer_sizes[i + 1], rngs=rngs))
+            if use_layer_norm:
+                self.layer_norms.append(
+                    nnx.LayerNorm(layer_sizes[i + 1], use_scale=False, use_bias=False, rngs=rngs)
+                )
 
         # Output layer
         self.output_layer = nnx.Linear(layer_sizes[-1], output_dim, rngs=rngs)
@@ -39,8 +46,10 @@ class MLP(nnx.Module):
         x = x.reshape(x.shape[0], -1)  # Flatten to [B, input_dim]
 
         # Forward pass through all hidden layers with activation
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             x = layer(x)
+            if self.use_layer_norm:
+                x = self.layer_norms[i](x)
             x = self.activation_fn(x)
 
         # Output layer without activation

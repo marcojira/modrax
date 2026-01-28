@@ -73,7 +73,15 @@ def train(config: TrainConfig) -> Network:
     if isinstance(network, RecurrentNetwork):
         recurrent_state = network.init_recurrent_state(config.num_envs)
 
-    alg = config.alg_cls(env_state, recurrent_state, env, config.alg_config, jit=config.jit)  # type: ignore
+    alg = config.alg_cls(
+        env_state,
+        recurrent_state,
+        network,
+        optimizer,
+        env,  # type: ignore
+        config.alg_config,
+        jit=config.jit,
+    )
 
     # Training loop
     num_iterations = config.total_steps // (config.num_envs * config.alg_config.num_gen_steps)

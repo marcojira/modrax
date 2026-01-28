@@ -17,6 +17,7 @@ class MLPConfig(BlockConfig):
 
     hidden_dims: Sequence[int]  # Sequence of hidden layer dimensions
     activation_fn: Callable = jax.nn.relu
+    use_layer_norm: bool = False
 
 
 class MLP(Block):
@@ -35,6 +36,7 @@ class MLP(Block):
             output_dim=output_dim,
             activation_fn=config.activation_fn,
             rngs=rngs,
+            use_layer_norm=config.use_layer_norm,
         )
 
     def __call__(self, x: Float[Array, "B ..."]) -> Float[Array, "B output_dim"]:
