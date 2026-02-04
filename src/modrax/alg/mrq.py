@@ -19,8 +19,7 @@ from modrax.policy import uniform_policy
 from modrax.rollout.base import RolloutData
 from modrax.rollout.rollout import rollout
 from modrax.types import Shape
-from modrax.update.base import update_network
-from modrax.utils import compute_training_metrics
+from modrax.utils import compute_training_metrics, update_network
 
 
 class MRQConfig(AlgConfig):

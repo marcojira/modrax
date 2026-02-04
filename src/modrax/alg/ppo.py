@@ -12,8 +12,7 @@ from modrax.policy import softmax_policy
 from modrax.rollout import RolloutData, Trajectory
 from modrax.rollout.recurrent_rollout import jit_recurrent_rollout, recurrent_rollout
 from modrax.rollout.rollout import jit_rollout, rollout
-from modrax.update.base import make_trajectory_minibatches, update_network
-from modrax.utils import compute_training_metrics
+from modrax.utils import compute_training_metrics, make_trajectory_minibatches, update_network
 
 
 class PPOConfig(AlgConfig):
