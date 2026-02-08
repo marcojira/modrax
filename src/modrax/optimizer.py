@@ -13,12 +13,13 @@ class OptimizerConfig(BaseModel):
     optimizer_type: Literal["adam", "sgd", "rmsprop"] = "adam"
     learning_rate: float = 3e-4
     gradient_clip: float | None = None
+    model_config = {"frozen": True}
 
 
 class Optimizer(nnx.Optimizer):
     """Optimizer with config-based initialization for consistent interface."""
 
-    def __init__(self, config: OptimizerConfig, network: Network):
+    def __init__(self, config: OptimizerConfig, network: Network | nnx.Module):
         # Create optax optimizer based on config
         if config.optimizer_type == "adam":
             optax_optimizer = optax.adam(config.learning_rate)

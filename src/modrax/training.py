@@ -28,9 +28,6 @@ class TrainConfig(BaseModel):
     seed: int = 0
 
     env_config: EnvConfig
-    network_cls: type[Network]
-    network_config: NetworkConfig
-    optimizer_config: OptimizerConfig
 
     alg_cls: type[Alg]
     alg_config: AlgConfig
@@ -50,38 +47,29 @@ class TrainConfig(BaseModel):
 def train(config: TrainConfig) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
     key = jax.random.key(config.seed)
-    key, network_key = jax.random.split(key)
 
     # Initialize components
     env = Env(config.env_config, jit=config.jit)
-    network = config.network_cls(
-        env.obs_shape,
-        env.num_actions,
-        config.network_config,
-        nnx.Rngs(network_key),
-    )
-    optimizer = Optimizer(config.optimizer_config, network)
-
-    if config.display_network:
-        nnx.display(network)
 
     # Initialize state
     reset_key, key = jax.random.split(key)
     env_state = env.reset(jax.random.split(reset_key, config.num_envs))
 
-    recurrent_state = None
-    if isinstance(network, RecurrentNetwork):
-        recurrent_state = network.init_recurrent_state(config.num_envs)
+    # recurrent_state = None
+    # if isinstance(network, RecurrentNetwork):
+    #     recurrent_state = network.init_recurrent_state(config.num_envs)
 
+    key, alg_key = jax.random.split(key)
     alg = config.alg_cls(
         env_state,
-        recurrent_state,
-        network,
-        optimizer,
         env,  # type: ignore
         config.alg_config,
+        alg_key,
         jit=config.jit,
     )
+
+    # if config.display_network:
+    #     nnx.display(network)
 
     # Training loop
     num_iterations = config.total_steps // (config.num_envs * config.alg_config.num_gen_steps)
@@ -90,8 +78,7 @@ def train(config: TrainConfig) -> Network:
     for iteration in pbar:
         key, iteration_key = jax.random.split(key)
 
-        network.train()
-        network, optimizer, metrics = alg(network, optimizer, iteration_key)
+        metrics = alg(iteration_key)
 
         # Metrics
         metrics["iteration"] = iteration
@@ -107,9 +94,9 @@ def train(config: TrainConfig) -> Network:
             pprint(formatted_metrics)  # Print current metrics
 
             if config.eval_fn is not None and config.eval_config is not None:
-                network.eval()
+                alg.network.eval()
                 eval_key, key = jax.random.split(key)
-                eval_metrics = config.eval_fn(network, env, config.eval_config, eval_key)
+                eval_metrics = config.eval_fn(alg.network, env, config.eval_config, eval_key)
 
                 pprint(eval_metrics)
                 if config.save_path is not None:
@@ -118,7 +105,7 @@ def train(config: TrainConfig) -> Network:
     # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
-        network.save(checkpoint_path)
+        alg.network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
     print("\nTraining completed!")

@@ -24,6 +24,18 @@ class Trajectory(NamedTuple):
     episode_lengths: Float[Array, "T B"]
 
 
+class Transition(NamedTuple):
+    obs: Float[Array, "B ..."]
+    next_obs: Float[Array, "B ..."]
+    info: Any
+    actions: Float[Array, "B ..."]
+    rewards: Float[Array, " B"]
+    action_masks: Float[Array, "B A"]
+    dones: Float[Array, " B"]
+    episode_returns: Float[Array, "T B"]
+    episode_lengths: Float[Array, "T B"]
+
+
 @struct.dataclass
 class RolloutData:
     trajectory: Trajectory
