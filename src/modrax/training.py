@@ -14,9 +14,7 @@ from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
 from modrax.eval import EvalConfig, EvalFn
-from modrax.network.base import Network, NetworkConfig
-from modrax.network.recurrent_network import RecurrentNetwork
-from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.network.base import Network
 from modrax.utils import format_metrics, pprint, save_metrics_jsonl
 
 
@@ -51,25 +49,16 @@ def train(config: TrainConfig) -> Network:
     # Initialize components
     env = Env(config.env_config, jit=config.jit)
 
-    # Initialize state
-    reset_key, key = jax.random.split(key)
-    env_state = env.reset(jax.random.split(reset_key, config.num_envs))
-
-    # recurrent_state = None
-    # if isinstance(network, RecurrentNetwork):
-    #     recurrent_state = network.init_recurrent_state(config.num_envs)
-
     key, alg_key = jax.random.split(key)
     alg = config.alg_cls(
-        env_state,
         env,  # type: ignore
         config.alg_config,
         alg_key,
         jit=config.jit,
     )
 
-    # if config.display_network:
-    #     nnx.display(network)
+    if config.display_network:
+        nnx.display(alg.network)
 
     # Training loop
     num_iterations = config.total_steps // (config.num_envs * config.alg_config.num_gen_steps)
@@ -77,7 +66,6 @@ def train(config: TrainConfig) -> Network:
 
     for iteration in pbar:
         key, iteration_key = jax.random.split(key)
-
         metrics = alg(iteration_key)
 
         # Metrics
@@ -91,8 +79,6 @@ def train(config: TrainConfig) -> Network:
 
         # Evaluation
         if iteration % config.eval_interval == 0:
-            pprint(formatted_metrics)  # Print current metrics
-
             if config.eval_fn is not None and config.eval_config is not None:
                 alg.network.eval()
                 eval_key, key = jax.random.split(key)

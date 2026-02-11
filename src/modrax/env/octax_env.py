@@ -67,10 +67,9 @@ class OctaxEnv(Env):
             state.env_state, action
         )
 
-        # Combine terminated and truncated into single done signal
         done = jnp.logical_or(terminated, truncated).astype(jnp.bool)
 
-        step_output = StepOutput(reward=reward, done=done, info=info)
+        step_output = StepOutput(reward=reward, done=done, truncation=truncated.astype(jnp.bool), info=info)
         new_state = State(
             env_state=next_env_state,
             obs=next_obs,

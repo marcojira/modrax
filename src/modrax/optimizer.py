@@ -1,6 +1,5 @@
 from typing import Literal
 
-import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
@@ -41,9 +40,10 @@ class Optimizer(nnx.Optimizer):
         super().__init__(network, optax_optimizer)
         self.config = config
 
-        # Does a first update using the optimizer (seems to initialize the optimizer state?)
-        # This prevents many functions from needing to be compiled twice
+        # Warmup update to initialize the optimizer state and prevent recompilation.
+        # Uses nnx.value_and_grad to match the real training code path.
+        def _warmup(model):
+            return jnp.array(0.0), {}
 
-        # Only use parameters (nnx.Param), not RNG state or other non-trainable state
-        _, params, _ = nnx.split(network, nnx.Param, ...)
-        self.update(jax.tree.map(jnp.zeros_like, params))
+        _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
+        self.update(grads)

@@ -47,7 +47,7 @@ class CraftaxEnv(Env):
             key, state.env_state, action, self._env_params
         )
 
-        step_output = StepOutput(reward=reward, done=done.astype(bool), info=info)
+        step_output = StepOutput(reward=reward, done=done.astype(bool), truncation=jnp.bool_(False), info=info)
         new_state = State(
             env_state=craftax_state,
             obs=obs,

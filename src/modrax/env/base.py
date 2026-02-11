@@ -41,12 +41,13 @@ class StateWithMetrics(NamedTuple):
 class StepOutput(NamedTuple):
     reward: Float[Array, ""]
     done: Bool[Array, ""]
+    truncation: Bool[Array, ""]
     info: Any
 
 
 class Env:
     obs_shape: Shape
-    num_actions: int
+    action_size: int
     config: EnvConfig
 
     def __new__(cls, config: EnvConfig, jit: bool = True):
@@ -187,7 +188,7 @@ class Env:
 
         Returns actions with shape (num_envs,).
         """
-        return jax.random.randint(key, (num_envs,), 0, self.num_actions)
+        return jax.random.randint(key, (num_envs,), 0, self.action_size)
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
         """

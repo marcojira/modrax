@@ -81,7 +81,7 @@ class ValueNetwork(nnx.Module):
     def __init__(self, zsa_dim: int, hdim: int, activation: Callable, rngs: nnx.Rngs):
         from modrax.network.module.mlp import MLP
 
-        self.q1 = MLP(zsa_dim, (hdim, hdim), hdim, activation, rngs, use_layer_norm=True)
+        self.q1 = MLP(zsa_dim, (hdim, hdim), hdim, activation, rngs, layer_norm=True)
         self.ln = nnx.LayerNorm(hdim, use_scale=False, use_bias=False, rngs=rngs)
         self.activation = activation
         self.q2 = nnx.Linear(hdim, 1, rngs=rngs)
@@ -125,7 +125,7 @@ class MRQNetwork(Network):
                 config.zs_dim,
                 config.enc_activation,
                 rngs,
-                use_layer_norm=True,
+                layer_norm=True,
             )
 
         # Action encoder (za)
@@ -138,7 +138,7 @@ class MRQNetwork(Network):
             config.zsa_dim,
             config.enc_activation,
             rngs,
-            use_layer_norm=True,
+            layer_norm=True,
         )
 
         # MDP predictor (next_zs, reward, done)
@@ -161,7 +161,7 @@ class MRQNetwork(Network):
             num_actions,
             config.policy_activation,
             rngs,
-            use_layer_norm=True,
+            layer_norm=True,
         )
 
     def __call__(self, inputs: dict[str, Float[Array, "B ..."]]) -> dict[str, Array]:

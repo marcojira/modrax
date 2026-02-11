@@ -80,7 +80,7 @@ class MuJoCoEnv(Env):
         self._env = registry.load(config.env_name)
 
         self.obs_shape = (self._env.observation_size,)
-        self.action_dim = self._env.action_size
+        self.action_size = self._env.action_size
 
         # self.action_ranges = self._env.mj_model.actuator_ctrlrange
         # self.action_ranges = jnp.array(self.action_ranges)
@@ -92,8 +92,8 @@ class MuJoCoEnv(Env):
 
         return State(
             env_state=mjx_state,
-            obs=mjx_state.obs,
-            action_mask=jnp.ones(self.action_dim, dtype=jnp.bool),
+            obs=jnp.array(mjx_state.obs),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
             info={"step": jnp.int32(0)},
         )
 
@@ -103,18 +103,19 @@ class MuJoCoEnv(Env):
         mjx_state = self._env.step(state.env_state, action)
 
         step = state.info["step"] + 1
-        truncated = step >= self.env_cfg.episode_length
-        done = mjx_state.done.astype(jnp.bool) | truncated
+        truncation = step >= self.env_cfg.episode_length
+        done = mjx_state.done.astype(jnp.bool) | truncation
 
         step_output = StepOutput(
             reward=mjx_state.reward,
             done=done,
+            truncation=truncation,
             info=mjx_state.info,
         )
         new_state = State(
             env_state=mjx_state,
-            obs=mjx_state.obs,
-            action_mask=jnp.ones(self.action_dim, dtype=jnp.bool),
+            obs=jnp.array(mjx_state.obs),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
             info={"step": step},
         )
 
@@ -122,7 +123,7 @@ class MuJoCoEnv(Env):
 
     def sample_action(self, key: Key[Array, ""], num_envs: int) -> Float[Array, "B A"]:
         """Sample random continuous actions in [-1, 1]."""
-        return jax.random.uniform(key, (num_envs, self.action_dim), minval=-1.0, maxval=1.0)
+        return jax.random.uniform(key, (num_envs, self.action_size), minval=-1.0, maxval=1.0)
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
         rendered = self._env.render([state.env_state], width=256, height=256)

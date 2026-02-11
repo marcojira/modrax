@@ -25,6 +25,7 @@ class RolloutReturnConfig(EvalConfig):
 def rollout_return(
     network: Network,
     env: Env,
+    rollout_fn: RolloutFn,
     config: RolloutReturnConfig,
     key: Key[Array, ""],
 ) -> dict[str, float]:

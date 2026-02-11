@@ -1,28 +1,27 @@
-"""Train PPO on MinAtar (250M steps, ~100s on an L40s)"""
+import os
+
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
 from modrax.alg.sac import SACAlg, SACConfig, SACNetworkConfig
 from modrax.env import MuJoCoEnvConfig
-from modrax.network import MLP, BlockNetwork, BlockNetworkConfig, Linear, LinearConfig, MLPConfig
-from modrax.optimizer import OptimizerConfig
 from modrax.training import TrainConfig, train
-from modrax.types import NUM_ACTIONS, OBS_SHAPE
 
 
 def main():
     train_config = TrainConfig(
         # Environment suite/environment
-        env_config=MuJoCoEnvConfig(env_name="HopperHop"),
+        env_config=MuJoCoEnvConfig(env_name="HumanoidWalk"),
         # Network class and config
-        # Specify algorithm class and config
         alg_cls=SACAlg,
-        alg_config=SACConfig(num_gen_steps=1),
+        alg_config=SACConfig(
+            num_gen_steps=1000, network_config=SACNetworkConfig(running_norm=True)
+        ),
         # Training parameters
         seed=0,
         num_envs=128,
-        total_steps=250_000_000,
+        total_steps=100_000_000,
         jit=True,
         # Save location
-        # save_path="out/examples/sac_mujoco",
         save_path=None,
         eval_interval=5000,
     )

@@ -22,7 +22,7 @@ class ReplayBuffer:
     def __init__(
         self,
         max_size: int,
-        alpha: float = 0.6,
+        alpha: float = 0.0,
         beta: float = 0.4,
         jit: bool = True,
     ):

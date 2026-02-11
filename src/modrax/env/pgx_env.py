@@ -100,7 +100,9 @@ class PGXEnv(Env):
 
         done = pgx_state.terminated
 
-        step_output = StepOutput(reward=reward, done=done.astype(jnp.bool), info={})
+        step_output = StepOutput(
+            reward=reward, done=done.astype(jnp.bool), truncation=jnp.bool_(False), info={}
+        )
         new_state = State(
             env_state=pgx_state,
             obs=pgx_state.observation,

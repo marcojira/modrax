@@ -25,7 +25,7 @@ class CNNConfig(BlockConfig):
     strides: tuple[int, ...] = (2, 2, 2, 1)
     activation_fn: Callable = jax.nn.elu
     normalize_input: bool = False
-    use_layer_norm: bool = True
+    layer_norm: bool = True
 
 
 def compute_conv_output_size(input_size: int, kernel_size: int, stride: int, padding: str) -> int:
@@ -99,7 +99,7 @@ class CNN(Block):
         )
 
         # Optional layer norm for final projection (no learnable affine to match reference)
-        if config.use_layer_norm:
+        if config.layer_norm:
             self.layer_norm = nnx.LayerNorm(output_dim, use_scale=False, use_bias=False, rngs=rngs)
 
     def __call__(self, x: Float[Array, "B H W C"]) -> Float[Array, "B D"]:
@@ -119,7 +119,7 @@ class CNN(Block):
         x = self.proj(x)
 
         # Layer norm + activation on final output
-        if self.config.use_layer_norm:
+        if self.config.layer_norm:
             x = self.layer_norm(x)
         x = self.config.activation_fn(x)
 

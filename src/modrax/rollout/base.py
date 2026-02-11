@@ -32,6 +32,7 @@ class Transition(NamedTuple):
     rewards: Float[Array, " B"]
     action_masks: Float[Array, "B A"]
     dones: Float[Array, " B"]
+    truncations: Float[Array, " B"]
     episode_returns: Float[Array, "T B"]
     episode_lengths: Float[Array, "T B"]
 

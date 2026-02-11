@@ -1,13 +1,11 @@
 from typing import Callable, Protocol
 
 import jax
-import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Key
 
 from modrax.env import StateWithMetrics
-from modrax.policy import PolicyFn
-from modrax.rollout.base import NetworkInput, NetworkOutput, RolloutData, Transition
+from modrax.rollout.base import NetworkInput, NetworkOutput, Transition
 
 
 class ForwardNetwork(Protocol):
@@ -29,7 +27,7 @@ def rollout(
         policy_key, env_key = jax.random.split(step_key)
 
         # Run network
-        action, _, _, _ = network.get_action(obs, policy_key)
+        action, _ = network.get_action(obs, policy_key)
 
         # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])
@@ -43,6 +41,7 @@ def rollout(
             rewards=step_output.reward,
             action_masks=action_mask,
             dones=step_output.done,
+            truncations=step_output.truncation,
             episode_returns=env_state.episode_return + step_output.reward,
             episode_lengths=env_state.episode_length + 1,
         )
@@ -52,7 +51,10 @@ def rollout(
     step_keys = jax.random.split(key, num_steps)
     (_, final_env_state), trajectory = nnx.scan(step)((network, env_state), step_keys)
 
-    return final_env_state, trajectory
+    return (
+        final_env_state,
+        trajectory,
+    )
 
 
 jit_rollout = nnx.jit(rollout, static_argnames=["step_fn", "num_steps"])

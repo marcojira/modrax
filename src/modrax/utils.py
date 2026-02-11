@@ -56,7 +56,7 @@ def compute_training_metrics(trajectory: Any) -> dict[str, float]:
 def to_python_float(value: Any, ndigits: int = 4) -> float:
     """Convert value to Python float, handling JAX arrays."""
     if hasattr(value, "mean"):
-        return round(float(value.mean().item()), ndigits)
+        return round(float(value.item()), ndigits)
     return round(float(value), ndigits)
 
 
@@ -130,7 +130,7 @@ def make_transition_minibatches(all_data: dict, key: Key[Array, ""], minibatch_s
     return minibatches
 
 
-def update_network(
+def update_network_minibatches(
     network: Network, optimizer: Optimizer, minibatches: Any, loss_fn: Callable, config
 ):
     def _update(graph_state, minibatch: Any):
@@ -154,3 +154,29 @@ def update_network(
     # Update objects after training
     nnx.update((network, optimizer), graph_state[-1])
     return loss, infos
+
+
+def update_network(network: Network, optimizer: Optimizer, data: Any, loss_fn: Callable, config):
+    (loss, info), grads = nnx.value_and_grad(loss_fn, has_aux=True)(network, data, config)
+    optimizer.update(grads)
+    return loss, info
+
+
+def finite_mean(x: Array) -> Array:
+    """Return the mean of non -inf entries."""
+    mask = x != -jnp.inf
+    return jnp.where(mask, x, 0.0).sum() / jnp.maximum(mask.sum(), 1)
+
+
+def ema_update(source: nnx.Module, target: nnx.Module, tau: float):
+    """Update target network parameters with exponential moving average of source."""
+    source_params = nnx.state(source, nnx.Param)
+    target_params = nnx.state(target, nnx.Param)
+    new_target_params = jax.tree.map(
+        lambda s, t: tau * s + (1 - tau) * t, source_params, target_params
+    )
+    nnx.update(target, new_target_params)
+
+    # Copy non-parameter state (e.g. BatchNorm running stats) directly
+    source_batch_stats = nnx.state(source, nnx.BatchStat)
+    nnx.update(target, source_batch_stats)
