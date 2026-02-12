@@ -33,6 +33,7 @@ dependencies = [
     "jumanji",
     # "octax", Needs to be installed from source
     "pgx",
+    "playground"
 ]
 
 [project.optional-dependencies]
