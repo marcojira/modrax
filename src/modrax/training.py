@@ -1,6 +1,7 @@
 """Training utilities for RL algorithms."""
 
 import os
+import time
 
 from modrax.alg.base import Alg, AlgConfig
 
@@ -58,19 +59,25 @@ def train(config: TrainConfig) -> Network:
     )
 
     if config.display_network:
-        nnx.display(alg.network)
+        nnx.display(alg.get_network())
 
     # Training loop
-    num_iterations = config.total_steps // (config.num_envs * config.alg_config.num_gen_steps)
-    pbar = tqdm(range(num_iterations), desc="Training")
+    num_epochs = config.total_steps // (alg.env_steps_per_epoch)
+    pbar = tqdm(range(num_epochs), desc="Training")
+    start = time.time()
 
-    for iteration in pbar:
-        key, iteration_key = jax.random.split(key)
-        metrics = alg(iteration_key)
+    for epoch in pbar:
+        key, epoch_key = jax.random.split(key)
+
+        # Alg epoch
+        metrics = alg(epoch_key)
 
         # Metrics
-        metrics["iteration"] = iteration
-        metrics["steps_M"] = (iteration * config.num_envs * config.alg_config.num_gen_steps) / 1e6
+        total_steps = epoch * alg.env_steps_per_epoch
+        metrics["epoch"] = epoch
+        metrics["steps_M"] = total_steps / 1e6
+        metrics["steps/s"] = total_steps / (time.time() - start)
+
         formatted_metrics = format_metrics(metrics)
         pbar.set_postfix(formatted_metrics)
 
@@ -78,11 +85,12 @@ def train(config: TrainConfig) -> Network:
             save_metrics_jsonl(formatted_metrics, os.path.join(config.save_path, "metrics.jsonl"))
 
         # Evaluation
-        if iteration % config.eval_interval == 0:
+        if epoch % config.eval_interval == 0:
             if config.eval_fn is not None and config.eval_config is not None:
-                alg.network.eval()
+                network = alg.get_network()
+                network.eval()
                 eval_key, key = jax.random.split(key)
-                eval_metrics = config.eval_fn(alg.network, env, config.eval_config, eval_key)
+                eval_metrics = config.eval_fn(network, env, config.eval_config, eval_key)
 
                 pprint(eval_metrics)
                 if config.save_path is not None:
@@ -91,7 +99,7 @@ def train(config: TrainConfig) -> Network:
     # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
-        alg.network.save(checkpoint_path)
+        alg.get_network().save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
     print("\nTraining completed!")

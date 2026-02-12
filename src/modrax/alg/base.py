@@ -1,5 +1,6 @@
 from abc import abstractmethod
 
+from flax import nnx
 from pgx import Env
 from pydantic import BaseModel
 
@@ -28,7 +29,8 @@ class Alg:
         pass
 
     @abstractmethod
-    def __call__(
-        self, network, optimizer, iteration_key
-    ) -> tuple[Network, Optimizer, dict[str, float]]:
+    def __call__(self, iteration_key) -> dict[str, float]:
         pass
+
+    def get_network(self):
+        return nnx.merge(*self.state.network_state)

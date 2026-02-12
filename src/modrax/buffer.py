@@ -8,8 +8,6 @@ from jaxtyping import Array, Float, Int, Key
 
 @struct.dataclass
 class BufferState:
-    """Immutable state for the replay buffer."""
-
     data: Any  # Pytree with arrays of shape (buffer_size, ...)
     priorities: Float[Array, " buffer_size"]
     position: Int[Array, ""]
@@ -22,22 +20,20 @@ class ReplayBuffer:
     def __init__(
         self,
         max_size: int,
-        alpha: float = 0.0,
-        beta: float = 0.4,
+        alpha: float = 0.0,  # Priority exponent (0 = uniform, 1 = full prioritization).
+        beta: float = 0.4,  # Importance sampling exponent for bias correction.
         jit: bool = True,
     ):
-        """Create a replay buffer.
-
-        Args:
-            max_size: Maximum buffer capacity.
-            alpha: Priority exponent (0 = uniform, 1 = full prioritization).
-            beta: Importance sampling exponent for bias correction.
-            jit: Whether to JIT compile buffer operations.
-        """
         self.max_size = max_size
         self.alpha = alpha
         self.beta = beta
-        self._setup_fns(jit)
+
+        maybe_jit = jax.jit if jit else lambda f, **_: f
+
+        # Public API
+        self.add = maybe_jit(self._add)
+        self.sample = maybe_jit(self._sample, static_argnames=("batch_size",))
+        self.update_priorities = maybe_jit(self._update_priorities)
 
     def init(self, sample: Any) -> BufferState:
         """Initialize buffer state from a sample pytree."""
@@ -52,8 +48,7 @@ class ReplayBuffer:
             size=jnp.array(0, dtype=jnp.int32),
         )
 
-    def _add_fn(self, state: BufferState, data: Any) -> BufferState:
-        """Add transitions with max priority."""
+    def _add(self, state: BufferState, data: Any) -> BufferState:
         num_samples = jax.tree.leaves(data)[0].shape[0]
         max_priority = jnp.maximum(state.priorities.max(), 1.0)
         priorities = jnp.full(num_samples, max_priority)
@@ -69,20 +64,16 @@ class ReplayBuffer:
         new_position = (state.position + num_samples) % self.max_size
         new_size = jnp.minimum(state.size + num_samples, self.max_size)
 
-        return state.replace(
+        return BufferState(
             data=new_data,
             priorities=new_priorities,
             position=new_position,
             size=new_size,
         )
 
-    def _sample_fn(
-        self,
-        state: BufferState,
-        key: Key[Array, ""],
-        batch_size: int,
+    def _sample(
+        self, state: BufferState, key: Key[Array, ""], batch_size: int
     ) -> tuple[Any, Int[Array, " batch_size"], Float[Array, " batch_size"]]:
-        """Sample a batch using prioritized sampling."""
         # Compute sampling probabilities from priorities
         valid_priorities = jnp.where(
             jnp.arange(self.max_size) < state.size,
@@ -104,45 +95,8 @@ class ReplayBuffer:
 
         return sampled_data, indices, weights
 
-    def _update_priorities_fn(
-        self,
-        state: BufferState,
-        indices: Int[Array, " N"],
-        priorities: Float[Array, " N"],
+    def _update_priorities(
+        self, state: BufferState, indices: Int[Array, " N"], priorities: Float[Array, " N"]
     ) -> BufferState:
-        """Update priorities for sampled transitions."""
         new_priorities = state.priorities.at[indices].set(priorities)
-        return state.replace(priorities=new_priorities)
-
-    def _setup_fns(self, jit: bool):
-        """Setup optionally JIT-compiled functions."""
-        if jit:
-            self._add = jax.jit(self._add_fn)
-            self._sample = jax.jit(self._sample_fn, static_argnames=("batch_size",))
-            self._update_priorities = jax.jit(self._update_priorities_fn)
-        else:
-            self._add = self._add_fn
-            self._sample = self._sample_fn
-            self._update_priorities = self._update_priorities_fn
-
-    def add(self, state: BufferState, data: Any) -> BufferState:
-        """Add transitions with max priority."""
-        return self._add(state, data)
-
-    def sample(
-        self,
-        state: BufferState,
-        key: Key[Array, ""],
-        batch_size: int,
-    ) -> tuple[Any, Int[Array, " batch_size"], Float[Array, " batch_size"]]:
-        """Sample a batch using prioritized sampling."""
-        return self._sample(state, key, batch_size)
-
-    def update_priorities(
-        self,
-        state: BufferState,
-        indices: Int[Array, " N"],
-        priorities: Float[Array, " N"],
-    ) -> BufferState:
-        """Update priorities for sampled transitions."""
-        return self._update_priorities(state, indices, priorities)
+        return state.replace(priorities=new_priorities)  # type: ignore
