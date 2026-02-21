@@ -1,9 +1,9 @@
 from modrax.env.base import Env, EnvConfig, EnvState, State, StateWithMetrics, StepOutput
-from modrax.env.craftax_env import CraftaxEnv, CraftaxEnvConfig
-from modrax.env.gymnax_env import GymnaxEnv, GymnaxEnvConfig
-from modrax.env.mujoco_env import MuJoCoEnv, MuJoCoEnvConfig
-from modrax.env.octax_env import OctaxEnv, OctaxEnvConfig
-from modrax.env.pgx_env import PGXEnv, PGXEnvConfig
+from modrax.env.craftax import CraftaxConfig, CraftaxEnv
+from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
+from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
+from modrax.env.octax import OctaxConfig, OctaxEnv
+from modrax.env.pgx import PGXConfig, PGXEnv
 
 __all__ = [
     "Env",
@@ -13,13 +13,13 @@ __all__ = [
     "StateWithMetrics",
     "StepOutput",
     "CraftaxEnv",
-    "CraftaxEnvConfig",
+    "CraftaxConfig",
     "GymnaxEnv",
-    "GymnaxEnvConfig",
-    "MuJoCoEnv",
-    "MuJoCoEnvConfig",
+    "GymnaxConfig",
+    "MuJoCoPlaygroundEnv",
+    "MuJoCoPlaygroundConfig",
     "OctaxEnv",
-    "OctaxEnvConfig",
+    "OctaxConfig",
     "PGXEnv",
-    "PGXEnvConfig",
+    "PGXConfig",
 ]

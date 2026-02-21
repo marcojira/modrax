@@ -1,19 +1,30 @@
-from typing import Callable, Protocol
+from typing import Any, Callable
 
 import jax
-from flax import nnx
-from jaxtyping import Array, Key
+from flax import nnx, struct
+from jaxtyping import Array, Float, Key
 
 from modrax.env import StateWithMetrics
-from modrax.rollout.base import NetworkInput, NetworkOutput, Transition
+from modrax.network.base import Network
 
 
-class ForwardNetwork(Protocol):
-    def __call__(self, inputs: NetworkInput) -> NetworkOutput: ...
+@struct.dataclass
+class Transition:
+    obs: Float[Array, "B ..."]
+    next_obs: Float[Array, "B ..."]
+    info: Any
+    actions: Float[Array, "B ..."]
+    rewards: Float[Array, " B"]
+    action_masks: Float[Array, "B A"]
+    network_output: Any
+    dones: Float[Array, " B"]
+    truncations: Float[Array, " B"]
+    episode_returns: Float[Array, "T B"]
+    episode_lengths: Float[Array, "T B"]
 
 
-def rollout(
-    network: ForwardNetwork,
+def transitions_rollout(
+    network: Network,
     step_fn: Callable,
     env_state: StateWithMetrics,
     num_steps: int,
@@ -27,7 +38,7 @@ def rollout(
         policy_key, env_key = jax.random.split(step_key)
 
         # Run network
-        action, _ = network.get_action(obs, policy_key)
+        action, out = network.get_action(obs, policy_key)
 
         # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])
@@ -40,6 +51,7 @@ def rollout(
             actions=action,
             rewards=step_output.reward,
             action_masks=action_mask,
+            network_output=out,
             dones=step_output.done,
             truncations=step_output.truncation,
             episode_returns=env_state.episode_return + step_output.reward,
@@ -57,4 +69,4 @@ def rollout(
     )
 
 
-jit_rollout = nnx.jit(rollout, static_argnames=["step_fn", "num_steps"])
+jit_transitions_rollout = nnx.jit(transitions_rollout, static_argnames=["step_fn", "num_steps"])

@@ -4,6 +4,7 @@ import os
 import time
 
 from modrax.alg.base import Alg, AlgConfig
+from modrax.optimizer import Optimizer, OptimizerConfig
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -14,8 +15,8 @@ from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.eval import EvalConfig, EvalFn
-from modrax.network.base import Network
+from modrax.eval.base import EvalConfig, EvalFn
+from modrax.network.base import Network, NetworkConfig
 from modrax.utils import format_metrics, pprint, save_metrics_jsonl
 
 
@@ -27,15 +28,14 @@ class TrainConfig(BaseModel):
     seed: int = 0
 
     env_config: EnvConfig
-
-    alg_cls: type[Alg]
+    network_config: NetworkConfig
+    optimizer_config: OptimizerConfig
     alg_config: AlgConfig
 
     eval_interval: int = 25
     eval_fn: SkipValidation[EvalFn] | None = None
     eval_config: SkipValidation[EvalConfig] | None = None
 
-    num_envs: int
     total_steps: int
     jit: bool = True
 
@@ -43,23 +43,14 @@ class TrainConfig(BaseModel):
     save_path: str | None = None
 
 
-def train(config: TrainConfig) -> Network:
+def train(
+    env: Env, network: Network, optimizer: Optimizer, alg: Alg, config: TrainConfig
+) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
     key = jax.random.key(config.seed)
 
-    # Initialize components
-    env = Env(config.env_config, jit=config.jit)
-
-    key, alg_key = jax.random.split(key)
-    alg = config.alg_cls(
-        env,  # type: ignore
-        config.alg_config,
-        alg_key,
-        jit=config.jit,
-    )
-
     if config.display_network:
-        nnx.display(alg.get_network())
+        nnx.display(network)
 
     # Training loop
     num_epochs = config.total_steps // (alg.env_steps_per_epoch)
@@ -87,7 +78,6 @@ def train(config: TrainConfig) -> Network:
         # Evaluation
         if epoch % config.eval_interval == 0:
             if config.eval_fn is not None and config.eval_config is not None:
-                network = alg.get_network()
                 network.eval()
                 eval_key, key = jax.random.split(key)
                 eval_metrics = config.eval_fn(network, env, config.eval_config, eval_key)
@@ -99,7 +89,7 @@ def train(config: TrainConfig) -> Network:
     # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
-        alg.get_network().save(checkpoint_path)
+        network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
     print("\nTraining completed!")

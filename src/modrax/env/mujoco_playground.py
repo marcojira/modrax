@@ -10,7 +10,7 @@ from jaxtyping import Array, Float, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-class MuJoCoEnvConfig(EnvConfig):
+class MuJoCoPlaygroundConfig(EnvConfig):
     env_name: Literal[
         # DM Control Suite
         "AcrobotSwingup",
@@ -72,8 +72,8 @@ class MuJoCoEnvConfig(EnvConfig):
     ] = "CartpoleBalance"
 
 
-class MuJoCoEnv(Env):
-    def __init__(self, config: MuJoCoEnvConfig, jit: bool = True):
+class MuJoCoPlaygroundEnv(Env):
+    def __init__(self, config: MuJoCoPlaygroundConfig, jit: bool = True):
         from mujoco_playground import registry
 
         self.env_cfg = registry.get_default_config(config.env_name)

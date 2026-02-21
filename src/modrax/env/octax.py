@@ -10,7 +10,7 @@ from octax.environments import create_environment  # type: ignore
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-class OctaxEnvConfig(EnvConfig):
+class OctaxConfig(EnvConfig):
     """Configuration for Octax environments."""
 
     env_name: Literal[
@@ -37,7 +37,7 @@ class OctaxEnvConfig(EnvConfig):
 
 
 class OctaxEnv(Env):
-    def __init__(self, config: OctaxEnvConfig, jit: bool = True):
+    def __init__(self, config: OctaxConfig, jit: bool = True):
         self._env, self._metadata = create_environment(config.env_name)
 
         # Get observation shape by doing a dummy reset

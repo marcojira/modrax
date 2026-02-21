@@ -10,7 +10,7 @@ from jaxtyping import Array, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-class CraftaxEnvConfig(EnvConfig):
+class CraftaxConfig(EnvConfig):
     env_name: Literal[
         "Craftax-Symbolic-v1",
         "Craftax-Pixels-v1",
@@ -20,13 +20,13 @@ class CraftaxEnvConfig(EnvConfig):
 
 
 class CraftaxEnv(Env):
-    def __init__(self, config: CraftaxEnvConfig, jit: bool = True):
+    def __init__(self, config: CraftaxConfig, jit: bool = True):
         self._env = make_craftax_env_from_name(config.env_name, auto_reset=False)
         self._env_params = self._env.default_params
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.num_actions = self._env.action_space(self._env_params).n  # type: ignore
+        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
 
         # Call parent init to setup functions
         super().__init__(config, jit=jit)
@@ -37,7 +37,7 @@ class CraftaxEnv(Env):
         return State(
             env_state=craftax_state,
             obs=obs,
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.bool),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
     def _inner_step_fn(
@@ -47,11 +47,13 @@ class CraftaxEnv(Env):
             key, state.env_state, action, self._env_params
         )
 
-        step_output = StepOutput(reward=reward, done=done.astype(bool), truncation=jnp.bool_(False), info=info)
+        step_output = StepOutput(
+            reward=reward, done=done.astype(bool), truncation=jnp.bool_(False), info=info
+        )
         new_state = State(
             env_state=craftax_state,
             obs=obs,
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.bool),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
         return step_output, new_state

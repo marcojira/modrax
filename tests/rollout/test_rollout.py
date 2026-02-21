@@ -1,7 +1,7 @@
 import jax
 
 from modrax.policy import softmax_policy
-from modrax.rollout.rollout import rollout
+from modrax.rollout.trajectory_rollout import rollout
 
 
 def test_rollout(env, network):

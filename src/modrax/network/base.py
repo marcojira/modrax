@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
+from jaxtyping import Array, Float
 from pydantic import BaseModel
-
-from modrax.types import Shape
 
 
 class NetworkConfig(BaseModel):
@@ -17,14 +15,11 @@ class NetworkConfig(BaseModel):
 class Network(nnx.Module):
     """Base class for all network types. Enables loading/saving functionality"""
 
-    def __init__(
-        self,
-        obs_shape: Shape,
-        num_actions: int,
-        config: NetworkConfig,
-        rngs: nnx.Rngs,
-    ):
-        pass
+    def reset(self, done: Float[Array, " B"]):
+        return
+
+    def get_carry(self):
+        return None
 
     def save(self, checkpoint_dir_path: str) -> None:
         """Save network to checkpoint directory.
@@ -52,7 +47,7 @@ class Network(nnx.Module):
         # Orbax needs absolute path
         checkpoint_path = os.path.abspath(checkpoint_path)
 
-        # TODO: potentially better to use abstract state her (see https://flax.readthedocs.io/en/latest/guides/checkpointing.html)
+        # TODO: potentially better to use abstract state here (see https://flax.readthedocs.io/en/latest/guides/checkpointing.html)
         graphdef, state = nnx.split(self)
 
         # Restore the actual state using orbax
@@ -60,9 +55,3 @@ class Network(nnx.Module):
         restored_state = checkpointer.restore(os.path.join(checkpoint_path, "params"), state)
 
         return nnx.merge(graphdef, restored_state)
-
-    def __call__(self, *args, **kwargs) -> Any:
-        pass
-
-    def train_forward(self, *args, **kwargs) -> Any:
-        pass

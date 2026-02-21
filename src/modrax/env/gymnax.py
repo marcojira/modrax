@@ -12,7 +12,7 @@ from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 from modrax.utils import fig_to_rgb_array
 
 
-class GymnaxEnvConfig(EnvConfig):
+class GymnaxConfig(EnvConfig):
     env_name: Literal[
         # Classic Control
         "Acrobot-v1",
@@ -46,7 +46,7 @@ class GymnaxEnvConfig(EnvConfig):
 
 
 class GymnaxEnv(Env):
-    def __init__(self, config: GymnaxEnvConfig, jit: bool = True):
+    def __init__(self, config: GymnaxConfig, jit: bool = True):
         self._env, self._env_params = gymnax.make(config.env_name)
 
         # Get observation and action shapes from environment spaces

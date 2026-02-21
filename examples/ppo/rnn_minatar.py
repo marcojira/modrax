@@ -1,0 +1,125 @@
+"""Train PPO with RNN on MinAtar."""
+
+import math
+
+import jax
+from flax import nnx
+from jaxtyping import Array, Float, Key
+
+from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
+from modrax.env import Env, PGXConfig
+from modrax.env.base import StateWithMetrics
+from modrax.network.base import NetworkConfig
+from modrax.network.mlp import MLP
+from modrax.network.rnn import NnxRNN
+from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.policy import softmax_policy
+from modrax.training import TrainConfig, train
+from modrax.types import Shape
+
+
+class MinAtarRNNNetworkConfig(NetworkConfig):
+    encoder_dim: int = 32
+    rnn_hidden_dim: int = 32
+    cell_type: str = "lstm"
+    policy_hidden_dims: tuple[int, ...] = (32, 32)
+    value_hidden_dims: tuple[int, ...] = (32, 32)
+    num_layers: int = 2
+
+
+class MinAtarRNNNetwork(PPONetwork):
+    def __init__(
+        self,
+        obs_shape: Shape,
+        num_actions: int,
+        num_envs: int,
+        cfg: MinAtarRNNNetworkConfig,
+        rngs: nnx.Rngs,
+    ):
+        relu = jax.nn.relu
+        self.encoder = nnx.Linear(math.prod(obs_shape), cfg.encoder_dim, rngs=rngs)
+        self.rnn = NnxRNN(
+            input_dim=cfg.encoder_dim,
+            output_dim=cfg.rnn_hidden_dim,
+            cell_type=cfg.cell_type,
+            num_layers=cfg.num_layers,
+            rngs=rngs,
+        )
+        self.rnn.initialize_carry(num_envs)
+        self.policy_head = MLP(
+            cfg.rnn_hidden_dim, cfg.policy_hidden_dims, num_actions, relu, rngs=rngs
+        )
+        self.value_head = MLP(cfg.rnn_hidden_dim, cfg.value_hidden_dims, 1, relu, rngs=rngs)
+
+    def train_forward(
+        self, obs: Float[Array, "B T ..."], dones: Float[Array, "B T"], init_carry, saved_carry
+    ):
+        encoded = self.encoder(obs.reshape(*obs.shape[:2], -1))
+        encoded = self.rnn.train_forward(
+            encoded,
+            dones,
+            init_carry,
+        )
+
+        policy_logits = self.policy_head(encoded)
+        value = self.value_head(encoded)
+        return PPONetworkOutput(policy_logits, value, None)
+
+    def policy(self, env_state: StateWithMetrics, key: Key[Array, ""]):
+        obs = env_state.obs.reshape(env_state.obs.shape[0], -1)
+        encoded = self.encoder(obs)
+        carry, out = self.rnn(encoded)
+
+        policy_logits, value = self.policy_head(out), self.value_head(out)
+        action = softmax_policy(policy_logits, env_state.action_mask, key)
+        return action, PPONetworkOutput(policy_logits, value, carry)
+
+    def bootstrap_value(self, env_state: StateWithMetrics) -> Float[Array, "B 1"]:
+        obs = env_state.obs.reshape(env_state.obs.shape[0], -1)
+        encoded = self.encoder(obs)
+        _, out = self.rnn._eval_forward(encoded)
+        return self.value_head(out)
+
+    def reset(self, done: Float[Array, " B"]):
+        self.rnn.reset(done)
+
+    def get_carry(self):
+        return self.rnn.carry.value
+
+
+def main():
+    env_config = PGXConfig(env_name="minatar-asterix", optimistic_reset=False)
+    network_config = MinAtarRNNNetworkConfig()
+    optimizer_config = OptimizerConfig(learning_rate=3e-4, gradient_clip=10)
+    alg_config = PPOConfig(
+        num_gen_steps=64,
+        minibatch_size=128,
+        num_epochs=3,
+        num_envs=4096,
+    )
+    train_config = TrainConfig(
+        seed=0,
+        env_config=env_config,
+        network_config=network_config,
+        optimizer_config=optimizer_config,
+        alg_config=alg_config,
+        total_steps=250_000_000,
+        jit=True,
+        save_path="out/examples/rnn-minatar",
+    )
+
+    env = Env(env_config)
+    network = MinAtarRNNNetwork(
+        env.obs_shape, env.action_size, alg_config.num_envs, network_config, rngs=nnx.Rngs(0)
+    )
+    optimizer = Optimizer(optimizer_config, network)
+    alg = PPOAlg(
+        env, network, optimizer, alg_config, jax.random.key(train_config.seed), jit=train_config.jit
+    )
+
+    trained_network = train(env, network, optimizer, alg, train_config)
+    return trained_network
+
+
+if __name__ == "__main__":
+    main()

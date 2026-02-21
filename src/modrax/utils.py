@@ -10,7 +10,7 @@ import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 from flax import nnx
-from jaxtyping import Array, Key
+from jaxtyping import Array, Key, PyTree
 from rich import print
 
 from modrax.network.base import Network
@@ -34,7 +34,7 @@ def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
     return rgb_array
 
 
-def compute_training_metrics(trajectory: Any) -> dict[str, float]:
+def compute_training_metrics(trajectory: Any):
     """Compute standard training metrics from trajectory and update infos."""
     num_dones = jnp.sum(trajectory.dones)
 
@@ -47,9 +47,9 @@ def compute_training_metrics(trajectory: Any) -> dict[str, float]:
     mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
 
     return {
-        "Rew.": mean_traj_reward.item(),
-        "Ep.Ret.": mean_ep_return.item(),
-        "Ep.Len.": mean_ep_length.item(),
+        "Rew.": mean_traj_reward,
+        "Ep.Ret.": mean_ep_return,
+        "Ep.Len.": mean_ep_length,
     }
 
 
@@ -98,18 +98,18 @@ def save_metrics_jsonl(metrics: dict[str, Any], save_path: str) -> None:
         f.write(json.dumps(metrics) + "\n")
 
 
-def make_trajectory_minibatches(all_data: dict, key: Key[Array, ""], minibatch_size: int):
-    batch_size = all_data["data"].trajectory.obs.shape[0]
+def make_trajectory_minibatches(data: PyTree, key: Key[Array, ""], minibatch_size: int):
+    batch_size = jax.tree_util.tree_leaves(data)[0].shape[0]
 
     # Shuffle trajectories (permute envs only)
     permutation = jax.random.permutation(key, batch_size)
-    all_data = jax.tree_util.tree_map(lambda x: x[permutation], all_data)
+    data = jax.tree_util.tree_map(lambda x: x[permutation], data)
 
     num_batches = batch_size // minibatch_size
 
     # Reshape into minibatches: (B, T, ...) -> (num_batches, minibatch_size, T, ...)
     minibatches = jax.tree_util.tree_map(
-        lambda x: x.reshape(num_batches, minibatch_size, *x.shape[1:]), all_data
+        lambda x: x.reshape(num_batches, minibatch_size, *x.shape[1:]), data
     )
 
     return minibatches

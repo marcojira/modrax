@@ -54,21 +54,21 @@ class Env:
         """Factory method to create appropriate Env subclass based on config type."""
         # If called on base Env class, dispatch to appropriate subclass
         if cls is Env:
-            from modrax.env.craftax_env import CraftaxEnv, CraftaxEnvConfig
-            from modrax.env.gymnax_env import GymnaxEnv, GymnaxEnvConfig
-            from modrax.env.mujoco_env import MuJoCoEnv, MuJoCoEnvConfig
-            from modrax.env.octax_env import OctaxEnv, OctaxEnvConfig
-            from modrax.env.pgx_env import PGXEnv, PGXEnvConfig
+            from modrax.env.craftax import CraftaxConfig, CraftaxEnv
+            from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
+            from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
+            from modrax.env.octax import OctaxConfig, OctaxEnv
+            from modrax.env.pgx import PGXConfig, PGXEnv
 
-            if isinstance(config, MuJoCoEnvConfig):
-                return MuJoCoEnv(config, jit)
-            elif isinstance(config, PGXEnvConfig):
+            if isinstance(config, MuJoCoPlaygroundConfig):
+                return MuJoCoPlaygroundEnv(config, jit)
+            elif isinstance(config, PGXConfig):
                 return PGXEnv(config, jit)
-            elif isinstance(config, CraftaxEnvConfig):
+            elif isinstance(config, CraftaxConfig):
                 return CraftaxEnv(config, jit)
-            elif isinstance(config, OctaxEnvConfig):
+            elif isinstance(config, OctaxConfig):
                 return OctaxEnv(config, jit)
-            elif isinstance(config, GymnaxEnvConfig):
+            elif isinstance(config, GymnaxConfig):
                 return GymnaxEnv(config, jit)
             else:
                 raise ValueError(f"Unknown env config type: {type(config)}")

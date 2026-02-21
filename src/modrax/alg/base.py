@@ -1,12 +1,10 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
-from flax import nnx
-from pgx import Env
+from jaxtyping import Array, Key
 from pydantic import BaseModel
 
-from modrax.env.base import EnvState
+from modrax.env.base import Env
 from modrax.network.base import Network
-from modrax.network.block.base import RecurrentState
 from modrax.optimizer import Optimizer
 
 
@@ -15,22 +13,19 @@ class AlgConfig(BaseModel):
     num_gen_steps: int
 
 
-class Alg:
+class Alg(ABC):
     def __init__(
         self,
-        env_state: EnvState,
-        recurrent_state: RecurrentState | None,
+        env: Env,
         network: Network,
         optimizer: Optimizer,
-        env: Env,
         alg_config: AlgConfig,
+        key: Key[Array, ""],
         jit: bool = False,
     ):
+        self.env_steps_per_epoch = 0  # Set during init
         pass
 
     @abstractmethod
-    def __call__(self, iteration_key) -> dict[str, float]:
+    def __call__(self, key: Key[Array, ""]) -> dict[str, float]:
         pass
-
-    def get_network(self):
-        return nnx.merge(*self.state.network_state)

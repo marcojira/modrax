@@ -1,33 +1,20 @@
-"""Running statistics normalization block."""
+"""Running statistics normalization using Welford's algorithm."""
 
 import math
 
-import jax
 import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
 
-from modrax.network.block.base import Block, BlockConfig
 from modrax.types import Shape
 
 
-class RunningNormConfig(BlockConfig):
-    epsilon: float = 1e-8
+class RunningNorm(nnx.Module):
+    """Normalizes inputs using running mean and variance."""
 
-
-class RunningNorm(Block):
-    """Normalizes inputs using running mean and variance (Welford's algorithm)."""
-
-    def __init__(
-        self,
-        input_shape: Shape | int,
-        output_dim: int,
-        config: RunningNormConfig,
-        rngs: nnx.Rngs,
-    ):
+    def __init__(self, input_shape: Shape | int, epsilon: float = 1e-8):
         self.input_dim = input_shape if isinstance(input_shape, int) else math.prod(input_shape)
-        self.output_dim = self.input_dim
-        self.epsilon = config.epsilon
+        self.epsilon = epsilon
 
         self.count = nnx.BatchStat(jnp.zeros(()))
         self.mean = nnx.BatchStat(jnp.zeros((self.input_dim,)))
