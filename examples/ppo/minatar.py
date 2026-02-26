@@ -9,15 +9,14 @@ from jaxtyping import Array, Float, Key
 from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
 from modrax.env import Env, PGXConfig
 from modrax.env.base import StateWithMetrics
-from modrax.network.base import NetworkConfig
 from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, train
-from modrax.types import Shape
+from modrax.types import Config, Shape
 
 
-class MinAtarNetworkConfig(NetworkConfig):
+class MinAtarNetworkConfig(Config):
     encoder_hidden_dims: tuple[int, ...] = (128,)
     encoder_dim: int = 64
     policy_hidden_dims: tuple[int, ...] = (64, 64)

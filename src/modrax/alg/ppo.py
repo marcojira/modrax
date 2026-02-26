@@ -11,7 +11,7 @@ from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
-from modrax.types import Cfg
+from modrax.types import Config
 from modrax.utils import (
     compute_training_metrics,
     make_trajectory_minibatches,
@@ -20,7 +20,7 @@ from modrax.utils import (
 
 
 @dataclass
-class PPOConfig(Cfg):
+class PPOConfig(Config):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_eps: float = 0.2

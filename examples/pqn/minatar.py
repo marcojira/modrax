@@ -9,14 +9,27 @@ from modrax.env.gymnax import GymnaxConfig
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, WandbConfig, train
-from modrax.types import Cfg
+from modrax.types import Config
 
 
 @dataclass
-class MinatarNetworkConfig(Cfg):
+class MinatarNetworkConfig(Config):
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
     eps: float = 0.1
+
+
+@dataclass
+class MinatarConfig(TrainConfig):
+    env_cfg: EnvConfig = GymnaxConfig(env_name="Asterix-MinAtar")
+    network_cfg: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
+    optimizer_cfg: OptimizerConfig = OptimizerConfig(
+        optimizer_type="radam", learning_rate=5e-4, lr_decay=True, gradient_clip=10
+    )
+    alg_cfg: PQNConfig = PQNConfig()
+    wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
+    eval_interval: int = 250
+    seed: int = 0
 
 
 class MinatarNetwork(PQNNetwork):
@@ -84,31 +97,15 @@ class MinatarNetwork(PQNNetwork):
         return self.__call__(env_state.obs)
 
 
-@dataclass
-class MinatarConfig(TrainConfig):
-    env_config: EnvConfig = GymnaxConfig(env_name="Asterix-MinAtar")
-    network_config: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
-    optimizer_config: OptimizerConfig = OptimizerConfig(
-        optimizer_type="radam",
-        learning_rate=5e-4,
-        gradient_clip=10,
-        lr_decay_steps=compute_total_updates(PQNConfig()),
-    )
-    alg_config: Cfg = PQNConfig()
-    wandb: WandbConfig = WandbConfig(enabled=True, project="modrax")
-    eval_interval: int = 250
-    seed: int = 0
-
-
 def main():
     cfg = MinatarConfig()
     key = jax.random.key(cfg.seed)
 
     # Init objects
-    env = Env(cfg.env_config)
-    network = MinatarNetwork(env.obs_shape, env.action_size, cfg.network_config, nnx.Rngs(cfg.seed))
-    optimizer = Optimizer(cfg.optimizer_config, network)
-    alg = PQNAlg(env, network, optimizer, cfg.alg_config, key=key, jit=True)
+    env = Env(cfg.env_cfg)
+    network = MinatarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(cfg.seed))
+    optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
+    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
 
     train(env, network, optimizer, alg, cfg)
 

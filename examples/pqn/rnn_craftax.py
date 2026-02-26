@@ -15,11 +15,11 @@ from modrax.network.rnn import NnxRNN
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, train
-from modrax.types import Cfg, Shape
+from modrax.types import Config, Shape
 
 
 @dataclass
-class CraftaxRNNNetworkConfig(Cfg):
+class CraftaxRNNNetworkConfig(Config):
     hidden_size: int = 512
     num_layers: int = 1
     num_rnn_layers: int = 1
@@ -184,7 +184,7 @@ class CraftaxPQNConfig(TrainConfig):
         gradient_clip=0.5,
         lr_decay_steps=compute_total_updates(ALG_CONFIG),
     )
-    alg_config: Cfg = ALG_CONFIG
+    alg_config: Config = ALG_CONFIG
     seed: int = 0
     eval_interval: int = 100
     save_path: str = "out/examples/pqn/rnn_craftax"

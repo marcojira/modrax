@@ -13,7 +13,7 @@ from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
-from modrax.types import Cfg
+from modrax.types import Config
 from modrax.utils import (
     compute_training_metrics,
     make_trajectory_minibatches,
@@ -23,7 +23,7 @@ from modrax.utils import (
 
 
 @dataclass
-class PQNConfig(Cfg):
+class PQNConfig(Config):
     gamma: float = 0.99
     lambd: float = 0.65
 

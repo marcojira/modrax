@@ -6,25 +6,31 @@ import optax
 from flax import nnx
 
 from modrax.network.base import Network
-from modrax.types import Cfg
+from modrax.types import Config
 
 
 @dataclass
-class OptimizerConfig(Cfg):
+class OptimizerConfig(Config):
     optimizer_type: Literal["adam", "radam", "sgd", "rmsprop"] = "adam"
     learning_rate: float = 3e-4
-    lr_decay_steps: int | None = None
+    lr_decay: bool = False
     gradient_clip: float | None = None
 
 
 class Optimizer(nnx.Optimizer):
     """Optimizer with config-based initialization for consistent interface."""
 
-    def __init__(self, config: OptimizerConfig, network: Network | nnx.Module):
+    def __init__(
+        self,
+        config: OptimizerConfig,
+        network: Network | nnx.Module,
+        total_num_updates: int | None = None,
+    ):
         # Learning rate (constant or linear decay)
         lr = config.learning_rate
-        if config.lr_decay_steps is not None:
-            lr = optax.linear_schedule(config.learning_rate, 0.0, config.lr_decay_steps)
+        if config.lr_decay:
+            assert total_num_updates is not None, "Need to pass `total_num_updates` to Optimizer"
+            lr = optax.linear_schedule(config.learning_rate, 0.0, total_num_updates)
 
         # Create optax optimizer based on config
         if config.optimizer_type == "adam":

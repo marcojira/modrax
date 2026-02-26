@@ -6,5 +6,5 @@ Shape: TypeAlias = Sequence[int]
 
 
 @dataclass
-class Cfg:
+class Config:
     pass

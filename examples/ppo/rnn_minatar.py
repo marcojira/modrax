@@ -9,16 +9,15 @@ from jaxtyping import Array, Float, Key
 from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
 from modrax.env import Env, PGXConfig
 from modrax.env.base import StateWithMetrics
-from modrax.network.base import NetworkConfig
 from modrax.network.mlp import MLP
 from modrax.network.rnn import NnxRNN
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, train
-from modrax.types import Shape
+from modrax.types import Config, Shape
 
 
-class MinAtarRNNNetworkConfig(NetworkConfig):
+class MinAtarRNNNetworkConfig(Config):
     encoder_dim: int = 32
     rnn_hidden_dim: int = 32
     cell_type: str = "lstm"

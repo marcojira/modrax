@@ -7,17 +7,17 @@ from flax import nnx, struct
 from jaxtyping import Array, Float, Key
 
 from modrax.alg.base import Alg
-from modrax.types import Cfg
 from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import Env, StateWithMetrics
-from modrax.network.base import Network, NetworkConfig
+from modrax.network.base import Network
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.rollout.transitions_rollout import Transition, transitions_rollout
+from modrax.types import Config
 from modrax.utils import ema_update, finite_mean
 
 
 @dataclass
-class SACConfig(Cfg):
+class SACConfig(Config):
     init_buffer_size: int = int(5e3)
     buffer_size: int = int(1e6)
 
@@ -36,7 +36,7 @@ class SACConfig(Cfg):
 
 
 @dataclass
-class SACNetworkConfig(NetworkConfig):
+class SACNetworkConfig(Config):
     running_norm: bool = True
     min_std: float = 0.001
     init_alpha: float = 1.0
@@ -74,9 +74,15 @@ class SACNetwork(Network):
 
 @dataclass
 class SACOptimizerConfig(OptimizerConfig):
-    q_optimizer_cfg: OptimizerConfig = field(default_factory=lambda: OptimizerConfig(learning_rate=1e-3))
-    actor_optimizer_cfg: OptimizerConfig = field(default_factory=lambda: OptimizerConfig(learning_rate=1e-3))
-    alpha_optimizer_cfg: OptimizerConfig = field(default_factory=lambda: OptimizerConfig(learning_rate=3e-4))
+    q_optimizer_cfg: OptimizerConfig = field(
+        default_factory=lambda: OptimizerConfig(learning_rate=1e-3)
+    )
+    actor_optimizer_cfg: OptimizerConfig = field(
+        default_factory=lambda: OptimizerConfig(learning_rate=1e-3)
+    )
+    alpha_optimizer_cfg: OptimizerConfig = field(
+        default_factory=lambda: OptimizerConfig(learning_rate=3e-4)
+    )
 
 
 class SACOptimizer(Optimizer):

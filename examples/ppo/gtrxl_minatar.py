@@ -9,16 +9,15 @@ from jaxtyping import Array, Float, Key
 from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
 from modrax.env import Env, PGXConfig
 from modrax.env.base import StateWithMetrics
-from modrax.network.base import NetworkConfig
 from modrax.network.gtrxl import GatedTransformerXL, GTrXLRecurrentState
 from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, train
-from modrax.types import Shape
+from modrax.types import Config, Shape
 
 
-class MinAtarGTrXLNetworkConfig(NetworkConfig):
+class MinAtarGTrXLNetworkConfig(Config):
     encoder_dim: int = 32
     policy_hidden_dims: tuple[int, ...] = (32, 32)
     value_hidden_dims: tuple[int, ...] = (32, 32)

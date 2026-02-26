@@ -7,11 +7,11 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Bool, Float, Int, Key
 
-from modrax.types import Cfg, Shape
+from modrax.types import Config, Shape
 
 
 @dataclass
-class EnvConfig(Cfg):
+class EnvConfig(Config):
     env_name: str = ""
     auto_reset: bool = True
     optimistic_reset: bool = False

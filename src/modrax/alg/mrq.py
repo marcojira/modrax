@@ -12,16 +12,16 @@ from jaxtyping import Array, Float, Key
 from modrax.alg.base import Alg
 from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import Env, StateWithMetrics
-from modrax.network.base import Network, NetworkConfig
+from modrax.network.base import Network
 from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
-from modrax.types import Cfg, Shape
+from modrax.types import Config, Shape
 from modrax.utils import finite_mean, update_network
 
 
 @dataclass
-class MRQConfig(Cfg):
+class MRQConfig(Config):
     num_envs: int = 32
     num_gen_steps: int = 256
     grad_steps: int = 4
@@ -47,7 +47,7 @@ class MRQConfig(Cfg):
 
 
 @dataclass
-class MRQNetworkConfig(NetworkConfig):
+class MRQNetworkConfig(Config):
     pixel_obs: bool = False
 
     # Dimensions

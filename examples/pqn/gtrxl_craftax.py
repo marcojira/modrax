@@ -15,11 +15,11 @@ from modrax.network.gtrxl import GatedTransformerXL, GTrXLRecurrentState
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, train
-from modrax.types import Cfg, Shape
+from modrax.types import Config, Shape
 
 
 @dataclass
-class CraftaxGTrXLNetworkConfig(Cfg):
+class CraftaxGTrXLNetworkConfig(Config):
     hidden_size: int = 512
     num_layers: int = 1
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
@@ -196,9 +196,19 @@ class CraftaxGTrXLPQNConfig(TrainConfig):
         optimizer_type="adam",
         learning_rate=3e-4,
         gradient_clip=0.5,
-        lr_decay_steps=compute_total_updates(ALG_CONFIG),
     )
-    alg_config: Cfg = ALG_CONFIG
+    alg_config: PQNConfig = PQNConfig(
+        total_steps=int(1e9),
+        num_envs=1024,
+        num_timesteps=128,
+        num_minibatches=4,
+        num_updates=4,
+        gamma=0.99,
+        lambd=0.5,
+        start_eps=1.0,
+        end_eps=0.005,
+        eps_decay=0.1,
+    )
     seed: int = 0
     eval_interval: int = 100
     save_path: str = "out/examples/pqn/gtrxl_craftax"

@@ -7,11 +7,11 @@ import orbax.checkpoint as ocp
 from flax import nnx
 from jaxtyping import Array, Float
 
-from modrax.types import Cfg
+from modrax.types import Config
 
 
 @dataclass
-class NetworkConfig(Cfg):
+class NetworkConfig(Config):
     pass
 
 
