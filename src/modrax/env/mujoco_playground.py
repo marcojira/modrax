@@ -1,5 +1,6 @@
 """Wrapper for MuJoCo Playground environments from https://github.com/google-deepmind/mujoco_playground"""
 
+from dataclasses import dataclass
 from typing import Literal
 
 import jax
@@ -10,6 +11,7 @@ from jaxtyping import Array, Float, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
+@dataclass
 class MuJoCoPlaygroundConfig(EnvConfig):
     env_name: Literal[
         # DM Control Suite

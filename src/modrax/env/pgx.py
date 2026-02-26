@@ -1,5 +1,6 @@
 """Wrapper for PGX Minatar envs, from https://github.com/sotetsuk/pgx"""
 
+from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
@@ -25,6 +26,7 @@ MINATAR_ENV_MAP = {
 }
 
 
+@dataclass
 class PGXConfig(EnvConfig):
     env_name: Literal[
         "2048",

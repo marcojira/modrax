@@ -1,15 +1,17 @@
+import dataclasses
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Bool, Float, Int, Key
-from pydantic import BaseModel
 
-from modrax.types import Shape
+from modrax.types import Cfg, Shape
 
 
-class EnvConfig(BaseModel):
+@dataclass
+class EnvConfig(Cfg):
     env_name: str = ""
     auto_reset: bool = True
     optimistic_reset: bool = False
@@ -199,4 +201,4 @@ class Env:
 
     def __hash__(self) -> int:
         """Hash based on config."""
-        return hash(self.config.model_dump_json())
+        return hash(str(dataclasses.asdict(self.config)))

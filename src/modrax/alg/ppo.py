@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import jax
@@ -5,11 +6,12 @@ import jax.numpy as jnp
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
-from modrax.alg.base import Alg, AlgConfig
+from modrax.alg.base import Alg
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
+from modrax.types import Cfg
 from modrax.utils import (
     compute_training_metrics,
     make_trajectory_minibatches,
@@ -17,7 +19,8 @@ from modrax.utils import (
 )
 
 
-class PPOConfig(AlgConfig):
+@dataclass
+class PPOConfig(Cfg):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_eps: float = 0.2

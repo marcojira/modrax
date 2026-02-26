@@ -1,5 +1,6 @@
 """Wrapper for Octax, from https://github.com/riiswa/octax"""
 
+from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
@@ -10,6 +11,7 @@ from octax.environments import create_environment  # type: ignore
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
+@dataclass
 class OctaxConfig(EnvConfig):
     """Configuration for Octax environments."""
 

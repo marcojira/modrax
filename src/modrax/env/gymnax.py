@@ -1,5 +1,6 @@
 """Wrapper for Gymnax environments from https://github.com/RobertTLange/gymnax"""
 
+from dataclasses import dataclass
 from typing import Literal
 
 import gymnax
@@ -12,6 +13,7 @@ from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 from modrax.utils import fig_to_rgb_array
 
 
+@dataclass
 class GymnaxConfig(EnvConfig):
     env_name: Literal[
         # Classic Control

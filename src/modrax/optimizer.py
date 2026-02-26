@@ -1,19 +1,20 @@
+from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
 import optax
 from flax import nnx
-from pydantic import BaseModel
 
 from modrax.network.base import Network
+from modrax.types import Cfg
 
 
-class OptimizerConfig(BaseModel):
+@dataclass
+class OptimizerConfig(Cfg):
     optimizer_type: Literal["adam", "radam", "sgd", "rmsprop"] = "adam"
     learning_rate: float = 3e-4
     lr_decay_steps: int | None = None
     gradient_clip: float | None = None
-    model_config = {"frozen": True}
 
 
 class Optimizer(nnx.Optimizer):

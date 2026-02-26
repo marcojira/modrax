@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 import orbax.checkpoint as ocp
 from flax import nnx
 from jaxtyping import Array, Float
-from pydantic import BaseModel
+
+from modrax.types import Cfg
 
 
-class NetworkConfig(BaseModel):
+@dataclass
+class NetworkConfig(Cfg):
     pass
 
 

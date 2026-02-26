@@ -8,7 +8,7 @@ from modrax.env.base import Env, EnvConfig, StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
-from modrax.training import TrainConfig, train
+from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Cfg
 
 
@@ -95,6 +95,7 @@ class MinatarConfig(TrainConfig):
         lr_decay_steps=compute_total_updates(PQNConfig()),
     )
     alg_config: Cfg = PQNConfig()
+    wandb: WandbConfig = WandbConfig(enabled=True, project="modrax")
     eval_interval: int = 250
     seed: int = 0
 

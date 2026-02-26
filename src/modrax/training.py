@@ -1,8 +1,11 @@
 """Training utilities for RL algorithms."""
 
+import dataclasses
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+import wandb
 
 from modrax.alg.base import Alg
 from modrax.optimizer import Optimizer, OptimizerConfig
@@ -16,9 +19,17 @@ from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.eval.base import EvalConfig, EvalFn
 from modrax.network.base import Network, NetworkConfig
 from modrax.utils import format_metrics, pprint, save_metrics_jsonl
+
+
+@dataclass
+class WandbConfig:
+    enabled: bool = False
+    project: str = ""
+    entity: str | None = None
+    run_name: str | None = None
+    tags: tuple[str] | None = None
 
 
 @dataclass
@@ -33,8 +44,30 @@ class TrainConfig:
     eval_interval: int = 0
     jit: bool = True
 
+    wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False
     save_path: str | None = None
+
+
+def log_metrics(metrics: dict, config: TrainConfig, filename: str):
+    """Log metrics to wandb and/or save to JSONL."""
+    if config.wandb.enabled:
+        wandb.log(metrics)
+    if config.save_path is not None:
+        save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
+
+
+def flatten_config(config: TrainConfig) -> dict:
+    """Flatten TrainConfig into a flat dict with prefixed keys for wandb."""
+    flat = {}
+    for f in dataclasses.fields(config):
+        value = getattr(config, f.name)
+        if dataclasses.is_dataclass(value):
+            for inner_f in dataclasses.fields(value):
+                flat[f"{f.name}.{inner_f.name}"] = getattr(value, inner_f.name)
+        else:
+            flat[f.name] = value
+    return flat
 
 
 def train(
@@ -43,8 +76,21 @@ def train(
     """Run training loop. Supports both standard and recurrent networks."""
     key = jax.random.key(config.seed)
 
+    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network)))
+    print(f"Training a network with {num_params:} parameters...")
+
     if config.display_network:
         nnx.display(network)
+
+    # Wandb
+    if config.wandb.enabled:
+        wandb.init(
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            name=config.wandb.run_name,
+            tags=config.wandb.tags,
+            config=flatten_config(config),
+        )
 
     # Training loop
     num_epochs = alg.total_steps // (alg.env_steps_per_epoch)
@@ -66,24 +112,27 @@ def train(
         formatted_metrics = format_metrics(metrics)
         pbar.set_postfix(formatted_metrics)
 
-        if config.save_path is not None:
-            save_metrics_jsonl(formatted_metrics, os.path.join(config.save_path, "metrics.jsonl"))
+        log_metrics(formatted_metrics, config, "metrics.jsonl")
 
         # Evaluation
         if config.eval_interval and epoch % config.eval_interval == 0:
             eval_key, key = jax.random.split(key)
             eval_metrics = alg.eval(eval_key)
-            eval_metrics = format_metrics(eval_metrics)
+            eval_metrics["epoch"] = epoch
+            eval_metrics["steps_M"] = total_steps / 1e6
+            eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}
 
             pprint(eval_metrics)
-            if config.save_path is not None:
-                save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
+            log_metrics(eval_metrics, config, "eval.jsonl")
 
     # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
         network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
+
+    if config.wandb.enabled:
+        wandb.finish()
 
     print("\nTraining completed!")
     return network

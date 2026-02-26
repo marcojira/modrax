@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 
 from jaxtyping import Array, Key
-from pydantic import BaseModel
 
 from modrax.env.base import Env
 from modrax.network.base import Network

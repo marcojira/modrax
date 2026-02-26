@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import jax
@@ -8,20 +9,19 @@ from flax import nnx
 from flax.struct import PyTreeNode
 from jaxtyping import Array, Float, Key
 
-from modrax.alg.base import Alg, AlgConfig
+from modrax.alg.base import Alg
 from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network, NetworkConfig
 from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
-from modrax.types import Shape
+from modrax.types import Cfg, Shape
 from modrax.utils import finite_mean, update_network
 
 
-class MRQConfig(AlgConfig):
-    model_config = {"arbitrary_types_allowed": True}
-
+@dataclass
+class MRQConfig(Cfg):
     num_envs: int = 32
     num_gen_steps: int = 256
     grad_steps: int = 4
@@ -46,9 +46,8 @@ class MRQConfig(AlgConfig):
     pre_activ_weight: float = 1e-5
 
 
+@dataclass
 class MRQNetworkConfig(NetworkConfig):
-    model_config = {"arbitrary_types_allowed": True}
-
     pixel_obs: bool = False
 
     # Dimensions

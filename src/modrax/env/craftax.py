@@ -1,5 +1,6 @@
 """Wrapper for Craftax and Craftax-Classic from https://github.com/MichaelTMatthews/Craftax"""
 
+from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
@@ -10,6 +11,7 @@ from jaxtyping import Array, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
+@dataclass
 class CraftaxConfig(EnvConfig):
     env_name: Literal[
         "Craftax-Symbolic-v1",
