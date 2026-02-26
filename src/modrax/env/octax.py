@@ -48,7 +48,7 @@ class OctaxEnv(Env):
         dummy_key = jax.random.key(0)
         _, dummy_obs, _ = self._env.reset(dummy_key)
         self.obs_shape = dummy_obs.shape
-        self.num_actions = self._env.num_actions
+        self.action_size = self._env.num_actions
 
         # Call parent init to setup functions
         super().__init__(config, jit=jit)
@@ -59,7 +59,7 @@ class OctaxEnv(Env):
         return State(
             env_state=env_state,
             obs=obs,
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.bool),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
     def _inner_step_fn(
@@ -71,11 +71,13 @@ class OctaxEnv(Env):
 
         done = jnp.logical_or(terminated, truncated).astype(jnp.bool)
 
-        step_output = StepOutput(reward=reward, done=done, truncation=truncated.astype(jnp.bool), info=info)
+        step_output = StepOutput(
+            reward=reward, done=done, truncation=truncated.astype(jnp.bool), info=info
+        )
         new_state = State(
             env_state=next_env_state,
             obs=next_obs,
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.bool),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
         return step_output, new_state

@@ -3,7 +3,7 @@
 import pytest
 from helpers import run_env_test
 
-from modrax.env import Env, GymnaxEnvConfig
+from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 
 TEST_ENVS = [
     "CartPole-v1",
@@ -16,6 +16,6 @@ TEST_ENVS = [
 @pytest.mark.parametrize("env_name", TEST_ENVS)
 def test_gymnax_env(env_name):
     """Test Gymnax environment initialization, reset, and step."""
-    config = GymnaxEnvConfig(env_name=env_name)
-    env = Env(config, jit=False)
+    config = GymnaxConfig(env_name=env_name)
+    env = GymnaxEnv(config, jit=False)
     run_env_test(env)

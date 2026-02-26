@@ -4,8 +4,8 @@ import jax
 from flax import nnx
 
 from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput, compute_total_updates
-from modrax.env.base import Env, EnvConfig, StateWithMetrics
-from modrax.env.gymnax import GymnaxConfig
+from modrax.env.base import StateWithMetrics
+from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, WandbConfig, train
@@ -21,7 +21,7 @@ class MinatarNetworkConfig(Config):
 
 @dataclass
 class MinatarConfig(TrainConfig):
-    env_cfg: EnvConfig = GymnaxConfig(env_name="Asterix-MinAtar")
+    env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
     optimizer_cfg: OptimizerConfig = OptimizerConfig(
         optimizer_type="radam", learning_rate=5e-4, lr_decay=True, gradient_clip=10
@@ -102,7 +102,7 @@ def main():
     key = jax.random.key(cfg.seed)
 
     # Init objects
-    env = Env(cfg.env_cfg)
+    env = GymnaxEnv(cfg.env_cfg)
     network = MinatarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(cfg.seed))
     optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
     alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)

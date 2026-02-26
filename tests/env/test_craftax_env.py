@@ -3,7 +3,7 @@
 import pytest
 from helpers import run_env_test
 
-from modrax.env import CraftaxEnvConfig, Env
+from modrax.env.craftax import CraftaxConfig, CraftaxEnv
 
 TEST_ENVS = [
     # "Craftax-Symbolic-v1",
@@ -14,6 +14,6 @@ TEST_ENVS = [
 @pytest.mark.parametrize("env_name", TEST_ENVS)
 def test_craftax_env(env_name):
     """Test Craftax environment initialization, reset, and step."""
-    config = CraftaxEnvConfig(env_name=env_name)
-    env = Env(config, jit=False)
+    config = CraftaxConfig(env_name=env_name)
+    env = CraftaxEnv(config, jit=False)
     run_env_test(env)
