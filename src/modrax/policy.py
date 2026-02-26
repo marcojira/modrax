@@ -24,6 +24,19 @@ def argmax_policy(
     return masked_logits.argmax(axis=-1)
 
 
+def epsilon_greedy_policy(
+    logits: Float[Array, "B A"],
+    action_mask: Float[Array, "B A"],
+    key: Key[Array, ""],
+    epsilon: float = 0.01,
+) -> Float[Array, " B"]:
+    random_key, explore_key = jax.random.split(key)
+    greedy_action = argmax_policy(logits, action_mask, key)
+    random_action = uniform_policy(logits, action_mask, random_key)
+    explore = jax.random.uniform(explore_key, (logits.shape[0],)) < epsilon
+    return jnp.where(explore, random_action, greedy_action)
+
+
 def uniform_policy(
     logits: Float[Array, "B A"],
     action_mask: Float[Array, "B A"],

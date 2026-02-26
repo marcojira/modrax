@@ -28,7 +28,7 @@ class MRQConfig(AlgConfig):
 
     buffer_size: int = 1_000_000
     min_buffer_samples: int = 10_000
-    minibatch_size: int = 256
+    minibatch_size: int = 512
 
     encoder_horizon: int = 4
     reward_horizon: int = 4

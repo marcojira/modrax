@@ -41,7 +41,7 @@ class PPONetworkOutput:
 
 
 class PPONetwork(Network):
-    """Abstract base class for PPO networks a"""
+    """Abstract base class for PPO networks"""
 
     def train_forward(
         self,

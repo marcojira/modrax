@@ -2,15 +2,16 @@
 
 import os
 import time
+from dataclasses import dataclass
 
-from modrax.alg.base import Alg, AlgConfig
+from modrax.alg.base import Alg
 from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.types import Cfg
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
 from flax import nnx
-from pydantic import BaseModel, SkipValidation
 from rich import print
 from tqdm import tqdm
 
@@ -20,23 +21,16 @@ from modrax.network.base import Network, NetworkConfig
 from modrax.utils import format_metrics, pprint, save_metrics_jsonl
 
 
-class TrainConfig(BaseModel):
-    """Configuration for training."""
-
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed: int = 0
-
+@dataclass
+class TrainConfig:
     env_config: EnvConfig
-    network_config: NetworkConfig
+    network_config: Cfg
     optimizer_config: OptimizerConfig
-    alg_config: AlgConfig
+    alg_config: Cfg
 
-    eval_interval: int = 25
-    eval_fn: SkipValidation[EvalFn] | None = None
-    eval_config: SkipValidation[EvalConfig] | None = None
+    seed: int
 
-    total_steps: int
+    eval_interval: int = 0
     jit: bool = True
 
     display_network: bool = False
@@ -53,7 +47,7 @@ def train(
         nnx.display(network)
 
     # Training loop
-    num_epochs = config.total_steps // (alg.env_steps_per_epoch)
+    num_epochs = alg.total_steps // (alg.env_steps_per_epoch)
     pbar = tqdm(range(num_epochs), desc="Training")
     start = time.time()
 
@@ -76,15 +70,14 @@ def train(
             save_metrics_jsonl(formatted_metrics, os.path.join(config.save_path, "metrics.jsonl"))
 
         # Evaluation
-        if epoch % config.eval_interval == 0:
-            if config.eval_fn is not None and config.eval_config is not None:
-                network.eval()
-                eval_key, key = jax.random.split(key)
-                eval_metrics = config.eval_fn(network, env, config.eval_config, eval_key)
+        if config.eval_interval and epoch % config.eval_interval == 0:
+            eval_key, key = jax.random.split(key)
+            eval_metrics = alg.eval(eval_key)
+            eval_metrics = format_metrics(eval_metrics)
 
-                pprint(eval_metrics)
-                if config.save_path is not None:
-                    save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
+            pprint(eval_metrics)
+            if config.save_path is not None:
+                save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
 
     # Save checkpoint
     if config.save_path is not None:

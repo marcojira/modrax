@@ -9,8 +9,9 @@ from modrax.network.base import Network
 
 
 class OptimizerConfig(BaseModel):
-    optimizer_type: Literal["adam", "sgd", "rmsprop"] = "adam"
+    optimizer_type: Literal["adam", "radam", "sgd", "rmsprop"] = "adam"
     learning_rate: float = 3e-4
+    lr_decay_steps: int | None = None
     gradient_clip: float | None = None
     model_config = {"frozen": True}
 
@@ -19,13 +20,20 @@ class Optimizer(nnx.Optimizer):
     """Optimizer with config-based initialization for consistent interface."""
 
     def __init__(self, config: OptimizerConfig, network: Network | nnx.Module):
+        # Learning rate (constant or linear decay)
+        lr = config.learning_rate
+        if config.lr_decay_steps is not None:
+            lr = optax.linear_schedule(config.learning_rate, 0.0, config.lr_decay_steps)
+
         # Create optax optimizer based on config
         if config.optimizer_type == "adam":
-            optax_optimizer = optax.adam(config.learning_rate)
+            optax_optimizer = optax.adam(lr)
+        elif config.optimizer_type == "radam":
+            optax_optimizer = optax.radam(lr)
         elif config.optimizer_type == "sgd":
-            optax_optimizer = optax.sgd(config.learning_rate)
+            optax_optimizer = optax.sgd(lr)
         elif config.optimizer_type == "rmsprop":
-            optax_optimizer = optax.rmsprop(config.learning_rate)
+            optax_optimizer = optax.rmsprop(lr)
         else:
             raise ValueError(f"Unknown optimizer type: {config.optimizer_type}")
 

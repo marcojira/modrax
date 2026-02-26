@@ -51,7 +51,7 @@ class GymnaxEnv(Env):
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.num_actions = self._env.action_space(self._env_params).n  # type: ignore
+        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
 
         # Call parent init to setup functions
         super().__init__(config, jit=jit)
@@ -62,7 +62,7 @@ class GymnaxEnv(Env):
         return State(
             env_state=gymnax_state,
             obs=obs.astype(jnp.int8),
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.float32),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 
     def _inner_step_fn(
@@ -76,7 +76,7 @@ class GymnaxEnv(Env):
         new_state = State(
             env_state=gymnax_state,
             obs=obs.astype(jnp.int8),
-            action_mask=jnp.ones(self.num_actions, dtype=jnp.float32),
+            action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 
         return step_output, new_state
