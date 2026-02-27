@@ -3,7 +3,10 @@
 import dataclasses
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+
+import imageio.v3 as iio
 
 import wandb
 from modrax.alg.base import Alg
@@ -18,8 +21,9 @@ from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.network.base import Network, NetworkConfig
-from modrax.utils import format_metrics, pprint, save_metrics_jsonl
+from modrax.env.base import StateWithMetrics
+from modrax.network.base import Network
+from modrax.utils import format_metrics, pprint, render_trajectories, save_metrics_jsonl
 
 
 @dataclass
@@ -46,6 +50,8 @@ class TrainConfig(Config):
     wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False
     save_path: str | None = None
+    save_gif_wandb: bool = False
+    save_gif_local: bool = False
 
 
 def log_metrics(metrics: dict, config: TrainConfig, filename: str):
@@ -54,6 +60,29 @@ def log_metrics(metrics: dict, config: TrainConfig, filename: str):
         wandb.log(metrics)
     if config.save_path is not None:
         save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
+
+
+def log_trajectories(
+    env: Env,
+    trajectories: StateWithMetrics,
+    config: TrainConfig,
+    epoch: int,
+    n_trajectories: int = 5,
+    fps: int = 10,
+):
+    """Render trajectories and log as GIFs to wandb and/or save to disk."""
+    if not (config.save_gif_local or config.save_gif_wandb):
+        return
+
+    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:, :n_trajectories], trajectories))
+
+    for i, frames in enumerate(rendered):
+        if config.save_gif_local and config.save_path is not None:
+            path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
+            iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
+        if config.save_gif_wandb and config.wandb.enabled:
+            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="gif")
+            wandb.log({f"eval/trajectory_{i}": video})
 
 
 def flatten_cfg(config: TrainConfig) -> dict:
@@ -114,13 +143,14 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         # Evaluation
         if cfg.eval_interval and epoch % cfg.eval_interval == 0:
             eval_key, key = jax.random.split(key)
-            eval_metrics = alg.eval(eval_key)
+            eval_metrics, trajectories = alg.eval(eval_key)
             eval_metrics["epoch"] = epoch
             eval_metrics["steps_M"] = total_steps / 1e6
             eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}
 
             pprint(eval_metrics)
             log_metrics(eval_metrics, cfg, "eval.jsonl")
+            log_trajectories(env, trajectories, cfg, epoch)
 
     # Save checkpoint
     if cfg.save_path is not None:

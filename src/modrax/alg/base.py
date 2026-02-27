@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from jaxtyping import Array, Key
 
-from modrax.env.base import Env
+from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 
@@ -31,5 +31,5 @@ class Alg(ABC):
         pass
 
     @abstractmethod
-    def eval(self, key: Key[Array, ""]) -> dict[str, float]:
+    def eval(self, key: Key[Array, ""]) -> tuple[dict[str, float], StateWithMetrics]:
         pass

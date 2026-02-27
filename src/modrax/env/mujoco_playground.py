@@ -1,7 +1,10 @@
 """Wrapper for MuJoCo Playground environments from https://github.com/google-deepmind/mujoco_playground"""
 
+import os
 from dataclasses import dataclass
 from typing import Literal
+
+os.environ.setdefault("MUJOCO_GL", "egl")
 
 import jax
 import jax.numpy as jnp
@@ -130,3 +133,10 @@ class MuJoCoPlaygroundEnv(Env):
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
         rendered = self._env.render([state.env_state], width=256, height=256)
         return np.array(rendered[0], dtype=np.uint8)
+
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        num_envs = states.obs.shape[0]
+        host_env_state = jax.device_get(states.env_state)
+        env_states = [jax.tree.map(lambda x: x[i], host_env_state) for i in range(num_envs)]
+        rendered = self._env.render(env_states, width=256, height=256)
+        return np.array(rendered, dtype=np.uint8)

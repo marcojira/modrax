@@ -103,3 +103,13 @@ class OctaxEnv(Env):
         rgb_array = np.stack([grayscale, grayscale, grayscale], axis=-1)
 
         return rgb_array
+
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        obs = np.array(states.obs)  # (B, [4,] W, H)
+
+        if obs.ndim == 4:
+            obs = obs[:, -1]  # (B, W, H)
+
+        obs = obs.transpose(0, 2, 1)  # (B, H, W)
+        grayscale = np.where(obs, 0, 255).astype(np.uint8)
+        return np.stack([grayscale, grayscale, grayscale], axis=-1)  # (B, H, W, 3)

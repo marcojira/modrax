@@ -83,6 +83,29 @@ class GymnaxEnv(Env):
 
         return step_output, new_state
 
+    MINATAR_ENVS = [
+        "Asterix-MinAtar",
+        "Breakout-MinAtar",
+        "Freeway-MinAtar",
+        "Seaquest-MinAtar",
+        "SpaceInvaders-MinAtar",
+    ]
+
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        """Fast batch rendering for MinAtar environments."""
+        if self.config.env_name not in self.MINATAR_ENVS:
+            return super().batch_render(states)
+
+        import seaborn as sns
+
+        obs = np.array(states.obs)  # (B, H, W, C)
+        n_channels = obs.shape[-1]
+        cmap_colors = sns.color_palette("cubehelix", n_channels)
+        color_table = (np.array([(0, 0, 0)] + list(cmap_colors)) * 255).astype(np.uint8)
+
+        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1)  # (B, H, W)
+        return color_table[channel_idx]  # (B, H, W, 3)
+
     """ Using logic from https://github.com/RobertTLange/gymnax/blob/main/gymnax/visualize/"""
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
@@ -116,14 +139,7 @@ class GymnaxEnv(Env):
             im = vis_catch.init_catch(ax, self._env, state.env_state, self._env_params)
             vis_catch.update_catch(im, self._env, state.env_state)
             return fig_to_rgb_array(fig)
-        elif self.config.env_name in [
-            "Asterix-MinAtar",
-            "Breakout-MinAtar",
-            "Freeway-MinAtar",
-            "Seaquest-MinAtar",
-            "SpaceInvaders-MinAtar",
-            "Pong-misc",
-        ]:
+        elif self.config.env_name in self.MINATAR_ENVS + ["Pong-misc"]:
             from gymnax.visualize import vis_minatar
 
             fig, ax = plt.subplots()

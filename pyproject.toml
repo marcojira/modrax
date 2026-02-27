@@ -25,15 +25,14 @@ dependencies = [
     "jaxtyping",
     "requests",
     "opencv-python",
-    "wandb",
-
+    "wandb[media]",
     # Envs
     "craftax",
     "gymnax",
     "jumanji",
     # "octax", Needs to be installed from source
     "pgx",
-    "playground"
+    "playground",
 ]
 
 [project.optional-dependencies]

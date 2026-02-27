@@ -30,6 +30,8 @@ class MinatarConfig(TrainConfig):
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
     eval_interval: int = 250
     seed: int = 0
+    save_path: str = "out/examples/pqn"
+    save_gif_wandb: bool = True
 
 
 class MinatarNetwork(PQNNetwork):

@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 import jax.numpy as jnp
-import matplotlib.colors as colors
-import matplotlib.pyplot as plt
 import numpy as np
 from jaxtyping import Array, Key
 from pgx import make
@@ -168,33 +166,24 @@ class PGXEnv(Env):
         else:
             return np.zeros((10, 10, 3))  # TODO: Implement visualization for board games
 
-    @staticmethod
-    def render_obs(obs: Array):
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        if self.config.env_name not in MINATAR_ENV_MAP:
+            return np.zeros((states.obs.shape[0], 10, 10, 3), dtype=np.uint8)
+
+        obs = np.array(states.env_state.observation)  # (B, H, W, C)
         n_channels = obs.shape[-1]
-
-        # Get colormap
         cmap_colors = PGXEnv._get_minatar_cmap(n_channels)
-        cmap_colors.insert(0, (0, 0, 0))
-        cmap = colors.ListedColormap(cmap_colors)
-        bounds = [i for i in range(n_channels + 2)]
-        norm = colors.BoundaryNorm(bounds, n_channels + 1)
+        color_table = (np.array([(0, 0, 0)] + cmap_colors) * 255).astype(np.uint8)
 
-        fig, ax = plt.subplots(figsize=(2, 2))
+        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1)  # (B, H, W)
+        return color_table[channel_idx]  # (B, H, W, 3)
 
-        numerical_state = (
-            jnp.amax(obs * jnp.reshape(jnp.arange(n_channels) + 1, (1, 1, -1)), 2) + 0.5
-        )
-        ax.imshow(numerical_state, cmap=cmap, norm=norm, interpolation="none")
-        ax.set_axis_off()
+    @staticmethod
+    def render_obs(obs: Array) -> np.ndarray:
+        n_channels = obs.shape[-1]
+        cmap_colors = PGXEnv._get_minatar_cmap(n_channels)
+        color_table = (np.array([(0, 0, 0)] + cmap_colors) * 255).astype(np.uint8)
 
-        # Draw the canvas to populate the buffer
-        fig.canvas.draw()
-
-        # Get RGB array from canvas (drops alpha channel)
-        rgb_array = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)  # type: ignore
-        rgb_array = rgb_array.reshape(fig.canvas.get_width_height()[::-1] + (4,))
-        rgb_array = rgb_array[:, :, :3]  # Drop alpha channel
-
-        plt.close(fig)  # Close figure to avoid display and free memory
-
-        return rgb_array
+        # channel_idx: 0=background, k+1=channel k active
+        channel_idx = np.max(np.array(obs) * np.arange(1, n_channels + 1), axis=-1)
+        return color_table[channel_idx]  # (H, W, 3)

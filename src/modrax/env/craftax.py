@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from craftax.craftax_env import make_craftax_env_from_name
@@ -60,11 +61,17 @@ class CraftaxEnv(Env):
 
         return step_output, new_state
 
-    def render(self, state: State | StateWithMetrics) -> np.ndarray:
+    def _get_renderer(self):
         if "Classic" in self.config.env_name:
             from craftax.craftax_classic.renderer import render_craftax_pixels
         else:
             from craftax.craftax.renderer import render_craftax_pixels
+        return render_craftax_pixels
 
-        rgb_array = render_craftax_pixels(state.env_state, block_pixel_size=16)
+    def render(self, state: State | StateWithMetrics) -> np.ndarray:
+        rgb_array = self._get_renderer()(state.env_state, block_pixel_size=16)
         return np.array(rgb_array, dtype=np.uint8)
+
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        frames = jax.vmap(self._get_renderer(), in_axes=(0, None))(states.env_state, 16)
+        return np.array(frames, dtype=np.uint8)

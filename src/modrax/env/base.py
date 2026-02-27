@@ -149,6 +149,13 @@ class Env:
         """
         raise NotImplementedError("Subclasses must implement render")
 
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        """Render a batch of states, returning array of shape (B, H, W, 3) with dtype uint8."""
+        frames = [
+            self.render(jax.tree.map(lambda x: x[i], states)) for i in range(states.obs.shape[0])
+        ]
+        return np.stack(frames)
+
     def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
         """Sample random actions for multiple environments.
 

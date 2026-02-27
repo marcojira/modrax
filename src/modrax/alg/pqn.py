@@ -205,8 +205,13 @@ class PQNAlg(Alg):
 
     def _eval_loop(self, network, key):
         eval_env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
-        episode_returns, episode_lengths = eval_rollout(network, self.env.step, eval_env_state, key)
-        return {"eval_return": episode_returns.mean(), "eval_length": episode_lengths.mean()}
+        episode_returns, episode_lengths, trajectories = eval_rollout(
+            network, self.env.step, eval_env_state, key, max_steps=2000
+        )
+        return {
+            "eval_return": episode_returns.mean(),
+            "eval_length": episode_lengths.mean(),
+        }, trajectories
 
     def eval(self, key):
         network, _ = nnx.merge(*self.state.agent_state)

@@ -13,6 +13,7 @@ from flax import nnx
 from jaxtyping import Array, Key, PyTree
 from rich import print
 
+from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 
@@ -182,3 +183,17 @@ def ema_update(source: nnx.Module, target: nnx.Module, tau: float):
     # Copy non-parameter state (e.g. BatchNorm running stats) directly
     source_batch_stats = nnx.state(source, nnx.BatchStat)
     nnx.update(target, source_batch_stats)
+
+
+def render_trajectories(
+    env: Env,
+    trajectories: StateWithMetrics,  # [T, B, H, W, 3]
+) -> list[np.ndarray]:
+    """Render trajectories into a list of numpy arrays, one per trajectory.
+
+    Each array has shape (T, H, W, 3) with dtype uint8.
+    """
+    return [
+        env.batch_render(jax.tree.map(lambda x: x[:, i], trajectories))
+        for i in range(len(trajectories))
+    ]
