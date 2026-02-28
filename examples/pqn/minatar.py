@@ -30,7 +30,6 @@ class MinatarConfig(TrainConfig):
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
     eval_interval: int = 250
     seed: int = 0
-    save_path: str = "out/examples/pqn"
     save_gif_wandb: bool = True
 
 
@@ -92,11 +91,8 @@ class MinatarNetwork(PQNNetwork):
         action = epsilon_greedy_policy(q_values, env_state.action_mask, key, self.eps)
         return action, PQNNetworkOutput(q_values, None)
 
-    def train_forward(self, obs, dones, init_carry, carry):
+    def train_forward(self, obs):
         return self.__call__(obs)
-
-    def get_last_q(self, env_state):
-        return self.__call__(env_state.obs)
 
 
 def main():

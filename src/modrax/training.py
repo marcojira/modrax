@@ -3,7 +3,6 @@
 import dataclasses
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import imageio.v3 as iio
@@ -52,6 +51,7 @@ class TrainConfig(Config):
     save_path: str | None = None
     save_gif_wandb: bool = False
     save_gif_local: bool = False
+    num_gif_trajectories: int = 5
 
 
 def log_metrics(metrics: dict, config: TrainConfig, filename: str):
@@ -67,7 +67,7 @@ def log_trajectories(
     trajectories: StateWithMetrics,
     config: TrainConfig,
     epoch: int,
-    n_trajectories: int = 5,
+    n_trajectories: int = 2,
     fps: int = 10,
 ):
     """Render trajectories and log as GIFs to wandb and/or save to disk."""
@@ -82,7 +82,7 @@ def log_trajectories(
             iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
         if config.save_gif_wandb and config.wandb.enabled:
             video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="gif")
-            wandb.log({f"eval/trajectory_{i}": video})
+            wandb.log({f"eval_trajectories/traj_{i}": video})
 
 
 def flatten_cfg(config: TrainConfig) -> dict:
@@ -102,7 +102,7 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
     """Run training loop. Supports both standard and recurrent networks."""
     key = jax.random.key(cfg.seed)
 
-    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network)))
+    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network, nnx.Param)))
     print(f"Training a network with {num_params:} parameters...")
 
     if cfg.display_network:
@@ -141,7 +141,7 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         log_metrics(formatted_metrics, cfg, "metrics.jsonl")
 
         # Evaluation
-        if cfg.eval_interval and epoch % cfg.eval_interval == 0:
+        if cfg.eval_interval and (epoch % cfg.eval_interval == 0 or epoch == num_epochs - 1):
             eval_key, key = jax.random.split(key)
             eval_metrics, trajectories = alg.eval(eval_key)
             eval_metrics["epoch"] = epoch
@@ -150,7 +150,7 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
 
             pprint(eval_metrics)
             log_metrics(eval_metrics, cfg, "eval.jsonl")
-            log_trajectories(env, trajectories, cfg, epoch)
+            log_trajectories(env, trajectories, cfg, epoch, n_trajectories=cfg.num_gif_trajectories)
 
     # Save checkpoint
     if cfg.save_path is not None:

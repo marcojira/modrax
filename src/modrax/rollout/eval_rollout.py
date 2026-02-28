@@ -15,8 +15,10 @@ def eval_rollout(
     env_state: StateWithMetrics,
     key: Key[Array, ""],
     max_steps: int = 1000,
+    num_trajectories: int = 10,
 ) -> tuple[Float[Array, " B"], Int[Array, " B"], StateWithMetrics]:
     """Scan for max_steps, return episode returns, lengths, and full trajectories."""
+    # Return limited trajectories for memory reasons
     num_envs = env_state.obs.shape[0]
 
     def step(carry, step_key):
@@ -35,7 +37,9 @@ def eval_rollout(
         ep_lengths = jnp.where(first_done, current_length, ep_lengths)
         done_mask = done_mask | step_output.done
 
-        return (network, new_env_state, done_mask, ep_returns, ep_lengths), new_env_state
+        return (network, new_env_state, done_mask, ep_returns, ep_lengths), jax.tree.map(
+            lambda x: x[:num_trajectories], new_env_state
+        )
 
     step_keys = jax.random.split(key, max_steps)
     (_, _, _, episode_returns, episode_lengths), trajectories = nnx.scan(step)(

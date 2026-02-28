@@ -9,12 +9,12 @@ from flax import nnx
 from jaxtyping import Array, Float, Int, Key
 
 from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput, compute_total_updates
-from modrax.env.base import Env, EnvConfig, StateWithMetrics
-from modrax.env.craftax import CraftaxConfig
+from modrax.env.base import StateWithMetrics
+from modrax.env.craftax import CraftaxConfig, CraftaxEnv
 from modrax.network.rnn import NnxRNN
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
-from modrax.training import TrainConfig, train
+from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
@@ -26,6 +26,36 @@ class CraftaxRNNNetworkConfig(Config):
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = True
     add_last_action: bool = True
+
+
+@dataclass
+class CraftaxPQNConfig(TrainConfig):
+    env_cfg: CraftaxConfig = CraftaxConfig(
+        env_name="Craftax-Symbolic-v1",
+        optimistic_reset=True,
+        num_reset_envs=16,
+    )
+    network_cfg: CraftaxRNNNetworkConfig = CraftaxRNNNetworkConfig()
+    optimizer_cfg: OptimizerConfig = OptimizerConfig(
+        optimizer_type="radam", learning_rate=3e-4, lr_decay=True, gradient_clip=0.5
+    )
+    alg_cfg: PQNConfig = PQNConfig(
+        total_steps=int(1e9),
+        num_envs=1024,
+        num_timesteps=128,
+        num_minibatches=4,
+        num_updates=4,
+        gamma=0.99,
+        lambd=0.5,
+        start_eps=1.0,
+        end_eps=0.005,
+        eps_decay=0.1,
+    )
+    wandb: WandbConfig = WandbConfig(enabled=True, project="modrax")
+    eval_interval: int = 100
+    seed: int = 0
+    save_gif_wandb: bool = True
+    num_gif_trajectories: int = 2
 
 
 class CraftaxRNNNetwork(PQNNetwork):
@@ -76,7 +106,7 @@ class CraftaxRNNNetwork(PQNNetwork):
         # Q-value output
         self.output = nnx.Linear(cfg.hidden_size, action_size, rngs=rngs)
 
-        # Track last action for ADD_LAST_ACTION
+        # Track last action for add_last_action
         self.last_action = nnx.Variable(jnp.zeros(num_envs, dtype=jnp.int32))
 
     def _apply_norm(self, x, norm, train: bool):
@@ -109,7 +139,7 @@ class CraftaxRNNNetwork(PQNNetwork):
         encoded = self._encode(obs, train=False)
         encoded = self._concat_last_action(encoded, self.last_action.value)
 
-        carry, rnn_out = self.rnn(encoded)
+        _, rnn_out = self.rnn(encoded)
         q_values = self.output(rnn_out)
 
         action = epsilon_greedy_policy(q_values, env_state.action_mask, key, self.eps)
@@ -130,22 +160,12 @@ class CraftaxRNNNetwork(PQNNetwork):
         encoded = self._encode(flat_obs)
 
         # Reconstruct last_actions from init_carry and saved_carry
-        # saved_carry = actions at each step (B, T), init_carry = (rnn_carry, initial_last_action)
         rnn_init_carry, initial_last_action = init_carry
-        # last_actions[t] = action at step t-1; last_actions[0] = initial_last_action
         last_actions = jnp.concatenate([initial_last_action[:, None], saved_carry[:, :-1]], axis=1)
         encoded = self._concat_last_action(encoded, last_actions)
 
         # RNN forward
         rnn_out = self.rnn.train_forward(encoded, dones, rnn_init_carry)
-        return self.output(rnn_out)
-
-    def get_last_q(self, env_state: StateWithMetrics):
-        obs = env_state.obs.reshape(env_state.obs.shape[0], -1)
-        encoded = self._encode(obs, train=False)
-        encoded = self._concat_last_action(encoded, self.last_action.value)
-
-        _, rnn_out = self.rnn._eval_forward(encoded)
         return self.output(rnn_out)
 
     def reset(self, done: Float[Array, " B"]):
@@ -156,57 +176,16 @@ class CraftaxRNNNetwork(PQNNetwork):
         return (self.rnn.carry.value, self.last_action.value)
 
 
-ALG_CONFIG = PQNConfig(
-    total_steps=int(1e9),
-    num_envs=1024,
-    num_timesteps=128,
-    num_minibatches=4,
-    num_updates=4,
-    gamma=0.99,
-    lambd=0.5,
-    start_eps=1.0,
-    end_eps=0.005,
-    eps_decay=0.1,
-)
-
-
-@dataclass
-class CraftaxPQNConfig(TrainConfig):
-    env_config: EnvConfig = CraftaxConfig(
-        env_name="Craftax-Symbolic-v1",
-        optimistic_reset=True,
-        num_reset_envs=16,
-    )
-    network_config: CraftaxRNNNetworkConfig = CraftaxRNNNetworkConfig()
-    optimizer_config: OptimizerConfig = OptimizerConfig(
-        optimizer_type="radam",
-        learning_rate=3e-4,
-        gradient_clip=0.5,
-        lr_decay_steps=compute_total_updates(ALG_CONFIG),
-    )
-    alg_config: Config = ALG_CONFIG
-    seed: int = 0
-    eval_interval: int = 100
-    save_path: str = "out/examples/pqn/rnn_craftax"
-
-
-def main(num_rnn_layers, gamma, **kwargs):
-    cfg = CraftaxPQNConfig()
-    cfg.network_config.num_rnn_layers = num_rnn_layers
-    cfg.alg_config.gamma = gamma
-    cfg.save_path = f"out/examples/pqn/rnn_craftax_online_targets_{kwargs['name']}"
+def main(cfg):
     key = jax.random.key(cfg.seed)
 
-    env = Env(cfg.env_config)
+    # Init objects
+    env = CraftaxEnv(cfg.env_cfg)
     network = CraftaxRNNNetwork(
-        env.obs_shape,
-        env.action_size,
-        cfg.alg_config.num_envs,
-        cfg.network_config,
-        rngs=nnx.Rngs(cfg.seed),
+        env.obs_shape, env.action_size, cfg.alg_cfg.num_envs, cfg.network_cfg, nnx.Rngs(cfg.seed)
     )
-    optimizer = Optimizer(cfg.optimizer_config, network)
-    alg = PQNAlg(env, network, optimizer, cfg.alg_config, key=key, jit=True)
+    optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
+    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
 
     train(env, network, optimizer, alg, cfg)
 
@@ -215,19 +194,23 @@ if __name__ == "__main__":
     project = ngn.init("modrax")
 
     gpu = ngn.GPU.L40S
-    time = "04:00:00"
+    time = "12:00:00"
     slurm_cfg = ngn.SlurmConfig(
         partition=ngn.Partition.LONG, gpu=gpu, num_cpus=4, ram_gb=24, time=time
     )
 
+    def fn(num_rnn_layers, **kwargs):
+        cfg = CraftaxPQNConfig()
+        cfg.network_cfg.num_rnn_layers = num_rnn_layers
+        main(cfg)
+
     project.run_exp(
-        f"pqn/rnn_craftax_online_targets",
-        main,
-        # {"num_rnn_layers": [1, 2], "gamma": [0.99, 0.999]},
-        {"num_rnn_layers": [1], "gamma": [0.99]},
+        "pqn/rnn_craftax",
+        fn,
+        {"num_rnn_layers": [1, 2]},
         slurm_cfg,
         extra_commands=[
             "source /home/mila/m/marco.jiralerspong/projects/modrax/.venv/bin/activate"
         ],
-        num_workers=4,
+        num_workers=2,
     )
