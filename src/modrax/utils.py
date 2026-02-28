@@ -193,7 +193,8 @@ def render_trajectories(
 
     Each array has shape (T, H, W, 3) with dtype uint8.
     """
+    num_trajectories = trajectories.obs.shape[1]
     return [
         env.batch_render(jax.tree.map(lambda x: x[:, i], trajectories))
-        for i in range(len(trajectories))
+        for i in range(num_trajectories)
     ]
