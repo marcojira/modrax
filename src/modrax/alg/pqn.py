@@ -12,7 +12,7 @@ from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 from modrax.rollout.eval_rollout import eval_rollout
-from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
+from modrax.rollout.trajectory_rollout import trajectory_rollout
 from modrax.types import Config
 from modrax.utils import (
     compute_training_metrics,
@@ -74,12 +74,14 @@ def compute_total_updates(cfg: PQNConfig) -> int:
 
 
 def compute_targets(
-    trajectory: Trajectory, q_targets: Float[Array, "B T"], config: PQNConfig
-) -> Float[Array, "T B"]:
-    def backwards_step(lambda_returns_and_next_q, traj_and_q_target):
-        trajectory, q_targets = traj_and_q_target
+    rewards: Float[Array, "B T"],
+    dones: Float[Array, "B T"],
+    q_targets: Float[Array, "B T A"],
+    config: PQNConfig,
+) -> Float[Array, "B T"]:
+    def backwards_step(lambda_returns_and_next_q, step_data):
+        reward, done, q_val = step_data
         lambda_returns, next_q = lambda_returns_and_next_q
-        done, reward, q_val = (trajectory.dones, trajectory.rewards, q_targets)
 
         target_bootstrap = reward + config.gamma * (1 - done) * next_q
         delta = lambda_returns - next_q
@@ -89,15 +91,18 @@ def compute_targets(
         return (lambda_returns, next_q), lambda_returns
 
     last_q = jnp.max(q_targets[:, -1], axis=-1)
-    lambda_return = (
-        trajectory.rewards[:, -2] + config.gamma * (1 - trajectory.dones[:, -2]) * last_q
-    )
+    lambda_return = rewards[:, -2] + config.gamma * (1 - dones[:, -2]) * last_q
     prev_q = jnp.max(q_targets[:, -2], axis=-1)
 
     scan_fn = nnx.scan(
         backwards_step, in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1), reverse=True
     )
-    _, targets = scan_fn((lambda_return, prev_q), (trajectory, q_targets))
+    _, targets = scan_fn(
+        (lambda_return, prev_q),
+        (rewards[:, :-2], dones[:, :-2], q_targets[:, :-2]),
+    )
+
+    targets = jnp.concatenate([targets, lambda_return[:, None]], axis=1)
 
     return targets
 
@@ -122,10 +127,10 @@ def pqn_recurrent_loss(network: PQNNetwork, minibatch, config: PQNConfig):
     target_q_values = jax.lax.stop_gradient(q_values)
 
     # Compute targets
-    targets = compute_targets(traj, target_q_values, config)
+    targets = compute_targets(traj.rewards, traj.dones, target_q_values, config)
 
     chosen_q_values = jnp.take_along_axis(q_values, traj.actions[..., None], axis=-1)
-    chosen_q_values = chosen_q_values.squeeze(axis=-1)
+    chosen_q_values = chosen_q_values.squeeze(axis=-1)[:, :-1]
     loss = 0.5 * jnp.square(chosen_q_values - targets).mean()
 
     return loss, {"loss": loss}
@@ -201,8 +206,11 @@ class PQNAlg(Alg):
                 )
                 q_targets = q_targets.reshape(trajectory.obs.shape[0], trajectory.obs.shape[1], -1)
 
-                targets = compute_targets(trajectory, q_targets, self.cfg)
-                all_data = {"trajectory": trajectory, "targets": targets}
+                targets = compute_targets(trajectory.rewards, trajectory.dones, q_targets, self.cfg)
+                all_data = {
+                    "trajectory": jax.tree.map(lambda x: x[:, :-1], trajectory),
+                    "targets": targets,
+                }
 
                 minibatch_size = (
                     self.cfg.num_envs * self.cfg.num_timesteps

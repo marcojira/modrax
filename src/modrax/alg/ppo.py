@@ -10,6 +10,7 @@ from modrax.alg.base import Alg
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
+from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
 from modrax.types import Config
 from modrax.utils import (
@@ -27,6 +28,7 @@ class PPOConfig(Config):
     value_coeff: float = 0.5
     entropy_coeff: float = 0.01
 
+    total_steps: int = int(1e7)
     num_envs: int = 1024
     num_gen_steps: int = 128
     minibatch_size: int = 4096
@@ -156,6 +158,7 @@ def ppo_loss(network: PPONetwork, minibatch, config: PPOConfig):
 class PPOState:
     agent_state: Any
     env_state: StateWithMetrics
+    step: int
 
 
 class PPOAlg(Alg):
@@ -164,18 +167,18 @@ class PPOAlg(Alg):
         env: Env,
         network: Network,
         optimizer: Optimizer,
-        alg_config: PPOConfig,
+        cfg: PPOConfig,
         key: Key[Array, ""],
         jit: bool = False,
     ):
-        self.env = env
-        self.cfg = alg_config
-        self.env_steps_per_epoch = alg_config.num_envs * alg_config.num_gen_steps
-        self.jit = jit
+        super().__init__(env, network, optimizer, cfg, key, jit)
+        self.total_steps = cfg.total_steps
+        self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
 
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
-        self.state = PPOState(nnx.split((network, optimizer)), env_state)
+        self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
         self.loop = nnx.jit(self._loop) if self.jit else self._loop
+        self.eval_loop = nnx.jit(self._eval_loop) if self.jit else self._eval_loop
 
     def _loop(self, state: PPOState, key: Key[Array, ""]):
         rollout_key, update_key = jax.random.split(key)
@@ -209,8 +212,23 @@ class PPOAlg(Alg):
         metrics = compute_training_metrics(data)
         metrics.update(jax.tree.map(lambda x: x.mean(), infos))
 
-        return PPOState(nnx.split((network, optimizer)), env_state), metrics
+        return PPOState(nnx.split((network, optimizer)), env_state, state.step + 1), metrics
 
     def __call__(self, key: Key[Array, ""]):
         self.state, metrics = self.loop(self.state, key)
         return metrics
+
+    def _eval_loop(self, network, key):
+        eval_env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
+        episode_returns, episode_lengths, trajectories = eval_rollout(
+            network, self.env.step, eval_env_state, key, max_steps=1000
+        )
+        return {
+            "eval_return": episode_returns.mean(),
+            "eval_length": episode_lengths.mean(),
+        }, trajectories
+
+    def eval(self, key):
+        network, _ = nnx.merge(*self.state.agent_state)
+        network = nnx.clone(network)
+        return self.eval_loop(network, key)

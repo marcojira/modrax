@@ -1,26 +1,46 @@
-"""Train PPO on MinAtar (250M steps, ~100s on an L40s)"""
+"""Train PPO on MinAtar"""
 
 import math
+from dataclasses import dataclass
 
 import jax
 from flax import nnx
 from jaxtyping import Array, Float, Key
 
 from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
-from modrax.env import Env, PGXConfig
 from modrax.env.base import StateWithMetrics
+from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
-from modrax.training import TrainConfig, train
+from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
+@dataclass
 class MinAtarNetworkConfig(Config):
     encoder_hidden_dims: tuple[int, ...] = (128,)
     encoder_dim: int = 64
     policy_hidden_dims: tuple[int, ...] = (64, 64)
     value_hidden_dims: tuple[int, ...] = (64, 64)
+
+
+@dataclass
+class MinAtarConfig(TrainConfig):
+    env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
+    network_cfg: MinAtarNetworkConfig = MinAtarNetworkConfig()
+    optimizer_cfg: OptimizerConfig = OptimizerConfig(learning_rate=3e-4, gradient_clip=0.5)
+    alg_cfg: PPOConfig = PPOConfig(
+        total_steps=250_000_000,
+        num_gen_steps=128,
+        minibatch_size=128,
+        num_epochs=3,
+        num_envs=4096,
+    )
+    wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
+    eval_interval: int = 100
+    seed: int = 0
+    save_path: None = None
 
 
 class MinAtarNetwork(PPONetwork):
@@ -60,37 +80,16 @@ class MinAtarNetwork(PPONetwork):
 
 
 def main():
-    # Configs
-    env_config = PGXConfig(env_name="minatar-asterix", optimistic_reset=False)
-    network_config = MinAtarNetworkConfig()
-    optimizer_config = OptimizerConfig(learning_rate=3e-4, gradient_clip=0.5)
-    alg_config = PPOConfig(num_gen_steps=128, minibatch_size=128, num_epochs=3, num_envs=4096)
-    train_config = TrainConfig(
-        env_config=env_config,
-        network_config=network_config,
-        optimizer_config=optimizer_config,
-        alg_config=alg_config,
-        # Training parameters
-        seed=0,
-        total_steps=250_000_000,
-        jit=True,
-        # Save location
-        save_path="out/examples/minatar-asterix",
-    )
+    cfg = MinAtarConfig()
+    key = jax.random.key(cfg.seed)
 
-    # Init
-    env = Env(env_config)
-    network = MinAtarNetwork(
-        env.obs_shape, env.action_size, network_config, rngs=nnx.Rngs(train_config.seed)
-    )
-    optimizer = Optimizer(optimizer_config, network)
-    alg = PPOAlg(
-        env, network, optimizer, alg_config, jax.random.key(train_config.seed), jit=train_config.jit
-    )
+    # Init objects
+    env = GymnaxEnv(cfg.env_cfg)
+    network = MinAtarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(cfg.seed))
+    optimizer = Optimizer(cfg.optimizer_cfg, network)
+    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
 
-    # Train
-    trained_network = train(env, network, optimizer, alg, train_config)
-    return trained_network
+    train(env, network, optimizer, alg, cfg)
 
 
 if __name__ == "__main__":

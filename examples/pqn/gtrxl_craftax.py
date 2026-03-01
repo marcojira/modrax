@@ -216,15 +216,16 @@ if __name__ == "__main__":
         partition=ngn.Partition.LONG, gpu=gpu, num_cpus=4, ram_gb=24, time=time
     )
 
-    def fn(num_transformer_layers, **kwargs):
+    def fn(num_transformer_layers, hidden_size, **kwargs):
         cfg = CraftaxGTrXLPQNConfig()
         cfg.network_cfg.num_transformer_layers = num_transformer_layers
+        cfg.network_cfg.hidden_size = hidden_size
         main(cfg)
 
     project.run_exp(
         "pqn/gtrxl_craftax",
         fn,
-        {"num_transformer_layers": [1]},
+        {"num_transformer_layers": [1], "hidden_size": [256, 512]},
         slurm_cfg,
         extra_commands=[
             "source /home/mila/m/marco.jiralerspong/projects/modrax/.venv/bin/activate"
