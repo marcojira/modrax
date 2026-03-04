@@ -3,6 +3,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import optax
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
@@ -22,6 +23,8 @@ from modrax.utils import (
 
 @dataclass
 class PPOConfig(Config):
+    name: str = "PPO"
+
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
@@ -31,8 +34,12 @@ class PPOConfig(Config):
     total_steps: int = int(1e7)
     num_envs: int = 1024
     num_gen_steps: int = 128
-    minibatch_size: int = 4096
-    num_epochs: int = 3
+    num_minibatches: int = 8
+    num_updates: int = 3
+
+    start_eps: float = 0.0
+    end_eps: float = 0.0
+    eps_decay: float = 0.0
 
 
 """ NETWORK """
@@ -60,15 +67,17 @@ class PPONetwork(Network):
     def policy(self, env_state, key: Key[Array, ""]) -> tuple[Int[Array, " B"], PPONetworkOutput]:
         raise NotImplementedError
 
-    def bootstrap_value(self, env_state) -> Float[Array, "B 1"]:
-        raise NotImplementedError
-
 
 """ HELPERS """
 
 
+def compute_total_updates(cfg: PPOConfig) -> int:
+    num_updates = cfg.total_steps // (cfg.num_envs * cfg.num_gen_steps)
+    return num_updates * cfg.num_updates * cfg.num_minibatches
+
+
 def compute_gae_advantages(
-    trajectory: Trajectory, last_val: Float[Array, " B"], config: PPOConfig
+    trajectory: Trajectory, config: PPOConfig
 ) -> tuple[Float[Array, "B T"], Float[Array, "B T"]]:
     def backwards_fn(gae_and_next_val, transition):
         gae, next_val = gae_and_next_val
@@ -79,16 +88,14 @@ def compute_gae_advantages(
 
         return (gae, val), gae
 
-    values = trajectory.network_output.value.squeeze(-1)
+    values = trajectory.network_output.value.squeeze(-1)  # [B, T]
+    last_val = values[:, -1]
 
-    # Transpose to (T, B) for scan, then transpose back
-    transitions = (trajectory.dones.T, values.T, trajectory.rewards.T)
-    _, advantages = jax.lax.scan(
-        backwards_fn, (jnp.zeros_like(last_val), last_val), transitions, reverse=True
-    )
-
-    advantages = advantages.T
-    returns = advantages + values
+    transitions = (trajectory.dones[:, :-1], values[:, :-1], trajectory.rewards[:, :-1])
+    _, advantages = nnx.scan(
+        backwards_fn, in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1), reverse=True
+    )((jnp.zeros_like(last_val), last_val), transitions)
+    returns = advantages + values[:, :-1]
     return advantages, returns
 
 
@@ -145,7 +152,7 @@ def ppo_loss(network: PPONetwork, minibatch, config: PPOConfig):
         "actor_loss": actor_loss.mean(),
         "critic_loss": critic_loss.mean(),
         "entropy": entropy.mean(),
-        "total_loss": total_loss,
+        "loss": total_loss,
     }
 
     return total_loss, info
@@ -174,6 +181,11 @@ class PPOAlg(Alg):
         super().__init__(env, network, optimizer, cfg, key, jit)
         self.total_steps = cfg.total_steps
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
+        self.num_epochs = self.total_steps // self.env_steps_per_epoch
+
+        self.eps_scheduler = optax.linear_schedule(
+            cfg.start_eps, cfg.end_eps, int(cfg.eps_decay * self.num_epochs)
+        )
 
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
@@ -184,27 +196,30 @@ class PPOAlg(Alg):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
+        # Update epsilon
+        network.eps = self.eps_scheduler(state.step)
+
         # Generate data
         init_carry = network.get_carry()
         env_state, data = trajectory_rollout(
             network, self.env.step, state.env_state, self.cfg.num_gen_steps, rollout_key
         )
 
-        # Compute bootstrap value without advancing the carry
-        last_val = network.bootstrap_value(env_state).squeeze(-1)
-        advantages, returns = compute_gae_advantages(data, last_val, self.cfg)
+        # Bootstrap using last value so [B T] -> [B T-1]
+        advantages, returns = compute_gae_advantages(data, self.cfg)
 
         all_data = {
-            "trajectory": data,
+            "trajectory": jax.tree.map(lambda x: x[:, :-1], data),
             "advantage": advantages,
             "return": returns,
             "init_carry": init_carry,
         }
 
         # Run multiple epochs of updates
-        epoch_keys = jax.random.split(update_key, self.cfg.num_epochs)
+        epoch_keys = jax.random.split(update_key, self.cfg.num_updates)
         for epoch_key in epoch_keys:
-            minibatches = make_trajectory_minibatches(all_data, epoch_key, self.cfg.minibatch_size)
+            minibatch_size = self.cfg.num_envs // self.cfg.num_minibatches
+            minibatches = make_trajectory_minibatches(all_data, epoch_key, minibatch_size)
             loss, infos = update_network_minibatches(
                 network, optimizer, minibatches, ppo_loss, self.cfg
             )
@@ -221,7 +236,7 @@ class PPOAlg(Alg):
     def _eval_loop(self, network, key):
         eval_env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         episode_returns, episode_lengths, trajectories = eval_rollout(
-            network, self.env.step, eval_env_state, key, max_steps=1000
+            network, self.env.step, eval_env_state, key, max_steps=2000
         )
         return {
             "eval_return": episode_returns.mean(),
@@ -231,4 +246,9 @@ class PPOAlg(Alg):
     def eval(self, key):
         network, _ = nnx.merge(*self.state.agent_state)
         network = nnx.clone(network)
+        network.eps = 0.0
+
+        if network.is_recurrent:
+            network.reset(jnp.ones(self.cfg.num_envs))
+
         return self.eval_loop(network, key)

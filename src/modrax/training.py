@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass, field
 
 import imageio.v3 as iio
-
 import wandb
+
 from modrax.alg.base import Alg
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.types import Config

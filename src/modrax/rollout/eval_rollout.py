@@ -28,6 +28,7 @@ def eval_rollout(
         action, _ = network.policy(env_state, policy_key)
         env_keys = jax.random.split(env_key, num_envs)
         step_output, new_env_state = step_fn(env_state, action, env_keys)
+        network.reset(step_output.done)
 
         first_done = step_output.done & ~done_mask
         current_return = env_state.episode_return + step_output.reward
@@ -42,7 +43,9 @@ def eval_rollout(
         )
 
     step_keys = jax.random.split(key, max_steps)
-    (_, _, _, episode_returns, episode_lengths), trajectories = nnx.scan(step)(
+    (_, final_env_state, done_mask, episode_returns, episode_lengths), trajectories = nnx.scan(
+        step
+    )(
         (
             network,
             env_state,
@@ -52,5 +55,9 @@ def eval_rollout(
         ),
         step_keys,
     )
+
+    # For envs that never finished, use their accumulated return/length
+    episode_returns = jnp.where(done_mask, episode_returns, final_env_state.episode_return)
+    episode_lengths = jnp.where(done_mask, episode_lengths, final_env_state.episode_length)
 
     return episode_returns, episode_lengths, trajectories

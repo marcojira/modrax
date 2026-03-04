@@ -24,6 +24,8 @@ from modrax.utils import (
 
 @dataclass
 class PQNConfig(Config):
+    name: str = "PQN"
+
     gamma: float = 0.99
     lambd: float = 0.65
 

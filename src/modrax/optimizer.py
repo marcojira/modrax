@@ -11,7 +11,7 @@ from modrax.types import Config
 
 @dataclass
 class OptimizerConfig(Config):
-    optimizer_type: Literal["adam", "radam", "sgd", "rmsprop"] = "adam"
+    optimizer_type: Literal["adam", "radam", "sgd", "rmsprop", "muon"] = "adam"
     learning_rate: float = 3e-4
     lr_decay: bool = False
     gradient_clip: float | None = None
@@ -41,6 +41,8 @@ class Optimizer(nnx.Optimizer):
             optax_optimizer = optax.sgd(lr)
         elif config.optimizer_type == "rmsprop":
             optax_optimizer = optax.rmsprop(lr)
+        elif config.optimizer_type == "muon":
+            optax_optimizer = optax.contrib.muon(lr)
         else:
             raise ValueError(f"Unknown optimizer type: {config.optimizer_type}")
 

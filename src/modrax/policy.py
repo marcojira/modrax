@@ -37,6 +37,20 @@ def epsilon_greedy_policy(
     return jnp.where(explore, random_action, greedy_action)
 
 
+def epsilon_softmax_policy(
+    logits: Float[Array, "B A"],
+    action_mask: Float[Array, "B A"],
+    key: Key[Array, ""],
+    epsilon: float = 0.01,
+) -> Float[Array, " B"]:
+    """Mix between softmax policy and uniform random."""
+    softmax_key, random_key, explore_key = jax.random.split(key, 3)
+    softmax_action = softmax_policy(logits, action_mask, softmax_key)
+    random_action = uniform_policy(logits, action_mask, random_key)
+    explore = jax.random.uniform(explore_key, (logits.shape[0],)) < epsilon
+    return jnp.where(explore, random_action, softmax_action)
+
+
 def uniform_policy(
     logits: Float[Array, "B A"],
     action_mask: Float[Array, "B A"],

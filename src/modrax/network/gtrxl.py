@@ -32,6 +32,7 @@ class GatedTransformerXL(nnx.Module):
         rngs: nnx.Rngs,
         gating: bool = False,
         gating_bias: float = 0.0,
+        cached_train: bool = True,
     ):
         self.output_dim = input_dim
         self.qkv_features = input_dim
@@ -41,6 +42,7 @@ class GatedTransformerXL(nnx.Module):
         self.gating_bias = gating_bias
         self.segment_len = segment_len
         self.rollout_memory_len = rollout_memory_len
+        self.cached_train = cached_train
 
         @nnx.split_rngs(splits=self.num_layers)
         @nnx.vmap
@@ -92,7 +94,55 @@ class GatedTransformerXL(nnx.Module):
 
         return hidden, y
 
-    def train_forward(
+    def online_train_forward(
+        self,
+        x: Float[Array, "B T D"],
+        init_carry: GTrXLRecurrentState,
+        saved_states: GTrXLRecurrentState,
+    ):
+        init_memory = init_carry.memory
+        mask = saved_states.mask
+
+        # Split minibatch into segments (along time dimension)
+        num_segments = x.shape[1] // self.segment_len
+        segment_encoded_obs = jnp.reshape(
+            x, (x.shape[0], num_segments, self.segment_len, *x.shape[2:])
+        )  # [B, NumSeg, SegLen, D]
+
+        # Add attention to current obs
+        mask = mask.at[:, :, :, :, -1].set(1)
+
+        mask = mask.swapaxes(1, 3)
+        mask = mask.squeeze(1)
+        mask = mask.reshape(mask.shape[0], num_segments, 1, self.segment_len, -1)
+        mask = jnp.concat(
+            [
+                mask,
+                jnp.zeros((mask.shape[0], num_segments, 1, self.segment_len, self.segment_len - 1)),
+            ],
+            axis=-1,
+        )  # [B, NumSeg, 1, SegLen, M+SegLen]
+
+        # Varying roll so that each segment element only attends to last M + itself
+        mask = jax.vmap(lambda x, shift: jnp.roll(x, shift, -1), in_axes=(-2, 0), out_axes=-2)(
+            mask, jnp.arange(self.segment_len)
+        )
+
+        def step_segment(carry, mask, obs):
+            self, memory = carry
+            hidden, out = self._forward(obs, memory, mask)
+            new_memory = jnp.roll(memory, -hidden.shape[1], axis=1)
+            new_memory = memory.at[:, -hidden.shape[1] :].set(hidden)
+
+            new_memory = jax.lax.stop_gradient(new_memory)
+            return (self, new_memory), out
+
+        _, out = nnx.scan(step_segment, in_axes=(nnx.Carry, 1, 1), out_axes=(nnx.Carry, 1))(
+            (self, init_memory), mask, segment_encoded_obs
+        )
+        return out.reshape(x.shape[0], x.shape[1], -1)
+
+    def cached_train_forward(
         self,
         x: Float[Array, "B T D"],
         init_carry: GTrXLRecurrentState,
@@ -131,7 +181,7 @@ class GatedTransformerXL(nnx.Module):
         )  # [B * NumSeg, M, L, D]
 
         """ MASK """
-        mask = mask.at[:, :, :, -1].set(1)  # Add attention to the current observation
+        mask = mask.at[:, :, :, :, -1].set(1)  # Add attention to the current observation
 
         # Reshape per segment
         mask = jnp.reshape(
@@ -149,6 +199,17 @@ class GatedTransformerXL(nnx.Module):
 
         _, out = self._forward(segment_encoded_obs, memory, mask)
         return out.reshape((x.shape[0], x.shape[1], -1))
+
+    def train_forward(
+        self,
+        x: Float[Array, "B T D"],
+        init_carry: GTrXLRecurrentState,
+        saved_states: GTrXLRecurrentState,
+    ):
+        if self.cached_train:
+            return self.cached_train_forward(x, init_carry, saved_states)
+        else:
+            return self.online_train_forward(x, init_carry, saved_states)
 
     def _eval_forward(self, x: Float[Array, "B D"]):
         # Reshape [B, D] -> [B, 1, D]

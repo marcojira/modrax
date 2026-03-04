@@ -4,6 +4,8 @@ CLAUDE.md
 out/
 projects/
 dev.py
+exps/
+*EXP_*
 
 # Python
 __pycache__/

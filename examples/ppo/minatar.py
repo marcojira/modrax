@@ -33,8 +33,8 @@ class MinAtarConfig(TrainConfig):
     alg_cfg: PPOConfig = PPOConfig(
         total_steps=250_000_000,
         num_gen_steps=128,
-        minibatch_size=128,
-        num_epochs=3,
+        num_minibatches=32,
+        num_updates=3,
         num_envs=4096,
     )
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
@@ -47,6 +47,8 @@ class MinAtarNetwork(PPONetwork):
     def __init__(
         self, obs_shape: Shape, num_actions: int, cfg: MinAtarNetworkConfig, rngs: nnx.Rngs
     ):
+        self.is_recurrent = False
+
         relu = jax.nn.relu
         self.encoder = MLP(
             math.prod(obs_shape), cfg.encoder_hidden_dims, cfg.encoder_dim, relu, rngs=rngs
@@ -73,10 +75,6 @@ class MinAtarNetwork(PPONetwork):
 
         action = softmax_policy(policy_logits, env_state.action_mask, key)
         return action, PPONetworkOutput(policy_logits, value, None)
-
-    def bootstrap_value(self, env_state: StateWithMetrics) -> Float[Array, "B 1"]:
-        _, value = self._forward(self._flatten_obs(env_state.obs))
-        return value
 
 
 def main():
