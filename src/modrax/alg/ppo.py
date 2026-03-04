@@ -189,6 +189,7 @@ class PPOAlg(Alg):
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
         self.loop = nnx.jit(self._loop)
+
     def _loop(self, state: PPOState, key: Key[Array, ""]):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)

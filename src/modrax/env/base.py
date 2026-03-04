@@ -60,60 +60,6 @@ class Env:
 
         self.config = config
 
-    def _reset_single(self, key: Key[Array, ""]) -> StateWithMetrics:
-        """Reset a single environment and wrap with metrics."""
-        state = self._inner_reset_fn(key)
-        return StateWithMetrics(
-            env_state=state.env_state,
-            obs=state.obs,
-            action_mask=state.action_mask,
-            info=state.info,
-            episode_return=jnp.zeros(()),
-            episode_length=jnp.zeros((), dtype=jnp.int32),
-        )
-
-    def _step_single(
-        self,
-        state: StateWithMetrics,
-        reset_state: StateWithMetrics,
-        action: Float[Array, "..."],
-        key: Key[Array, ""],
-    ) -> tuple[StepOutput, StateWithMetrics]:
-        """Step a single environment with auto-reset and metric tracking."""
-        inner_state = State(
-            env_state=state.env_state,
-            obs=state.obs,
-            action_mask=state.action_mask,
-            info=state.info,
-        )
-        step_output, new_state = self._inner_step_fn(inner_state, action, key)
-
-        if self.config.auto_reset:
-            new_state = jax.lax.cond(
-                step_output.done > 0,
-                lambda: State(
-                    env_state=reset_state.env_state,
-                    obs=reset_state.obs,
-                    action_mask=reset_state.action_mask,
-                    info=reset_state.info,
-                ),
-                lambda: new_state,
-            )
-            episode_return = (state.episode_return + step_output.reward) * (1 - step_output.done)
-            episode_length = jnp.int32((state.episode_length + 1) * (1 - step_output.done))
-        else:
-            episode_return = state.episode_return + step_output.reward
-            episode_length = state.episode_length + 1
-
-        return step_output, StateWithMetrics(
-            env_state=new_state.env_state,
-            obs=new_state.obs,
-            action_mask=new_state.action_mask,
-            info=new_state.info,
-            episode_return=episode_return,
-            episode_length=episode_length,
-        )
-
     @nnx.jit(static_argnames=["self"])
     def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
         """Reset B environments in parallel.
@@ -172,6 +118,60 @@ class Env:
     def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
         """Sample random actions for num_envs environments."""
         return jax.random.randint(key, (num_envs,), 0, self.action_size)
+
+    def _reset_single(self, key: Key[Array, ""]) -> StateWithMetrics:
+        """Reset a single environment and wrap with metrics."""
+        state = self._inner_reset_fn(key)
+        return StateWithMetrics(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            info=state.info,
+            episode_return=jnp.zeros(()),
+            episode_length=jnp.zeros((), dtype=jnp.int32),
+        )
+
+    def _step_single(
+        self,
+        state: StateWithMetrics,
+        reset_state: StateWithMetrics,
+        action: Float[Array, "..."],
+        key: Key[Array, ""],
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step a single environment with auto-reset and metric tracking."""
+        inner_state = State(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            info=state.info,
+        )
+        step_output, new_state = self._inner_step_fn(inner_state, action, key)
+
+        if self.config.auto_reset:
+            new_state = jax.lax.cond(
+                step_output.done > 0,
+                lambda: State(
+                    env_state=reset_state.env_state,
+                    obs=reset_state.obs,
+                    action_mask=reset_state.action_mask,
+                    info=reset_state.info,
+                ),
+                lambda: new_state,
+            )
+            episode_return = (state.episode_return + step_output.reward) * (1 - step_output.done)
+            episode_length = jnp.int32((state.episode_length + 1) * (1 - step_output.done))
+        else:
+            episode_return = state.episode_return + step_output.reward
+            episode_length = state.episode_length + 1
+
+        return step_output, StateWithMetrics(
+            env_state=new_state.env_state,
+            obs=new_state.obs,
+            action_mask=new_state.action_mask,
+            info=new_state.info,
+            episode_return=episode_return,
+            episode_length=episode_length,
+        )
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         """Reset a single environment. Subclasses must override this."""
