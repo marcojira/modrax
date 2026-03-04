@@ -10,6 +10,8 @@ from modrax.network.base import Network
 
 @struct.dataclass
 class Transition:
+    """A single (s, a, s') transition collected per step. Stacked over T steps by transitions_rollout."""
+
     obs: Float[Array, "B ..."]
     next_obs: Float[Array, "B ..."]
     info: Any
@@ -19,8 +21,8 @@ class Transition:
     network_output: Any
     dones: Float[Array, " B"]
     truncations: Float[Array, " B"]
-    episode_returns: Float[Array, "T B"]
-    episode_lengths: Float[Array, "T B"]
+    episode_returns: Float[Array, " B"]
+    episode_lengths: Float[Array, " B"]
 
 
 def transitions_rollout(
@@ -30,6 +32,24 @@ def transitions_rollout(
     num_steps: int,
     key: Key[Array, ""],
 ) -> tuple[StateWithMetrics, Transition]:
+    """Collect num_steps transitions from B parallel envs.
+
+    Unlike trajectory_rollout, this stores both obs and next_obs per step and
+    does NOT reset network state on episode boundaries (suited for off-policy methods).
+    Returned Transition arrays have shape [T, B, ...].
+
+    Args:
+        network: Policy network.
+        step_fn: env.step — called as step_fn(state, action, keys).
+        env_state: Initial batched env state with shape B.
+        num_steps: Number of environment steps to collect.
+        key: Single PRNG key.
+
+    Returns:
+        final_env_state: Env state after the last step.
+        trajectory: Transition of shape [T, B, ...]
+    """
+
     def step(carry, step_key):
         network, env_state = carry
         obs = env_state.obs
@@ -38,7 +58,7 @@ def transitions_rollout(
         policy_key, env_key = jax.random.split(step_key)
 
         # Run network
-        action, out = network.get_action(obs, policy_key)
+        action, out = network.policy(env_state, policy_key)
 
         # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])

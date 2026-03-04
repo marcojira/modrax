@@ -78,7 +78,7 @@ class MuJoCoPlaygroundConfig(EnvConfig):
 
 
 class MuJoCoPlaygroundEnv(Env):
-    def __init__(self, config: MuJoCoPlaygroundConfig, jit: bool = True):
+    def __init__(self, config: MuJoCoPlaygroundConfig):
         from mujoco_playground import registry
 
         self.env_cfg = registry.get_default_config(config.env_name)
@@ -87,10 +87,7 @@ class MuJoCoPlaygroundEnv(Env):
         self.obs_shape = (self._env.observation_size,)
         self.action_size = self._env.action_size
 
-        # self.action_ranges = self._env.mj_model.actuator_ctrlrange
-        # self.action_ranges = jnp.array(self.action_ranges)
-
-        super().__init__(config, jit=jit)
+        super().__init__(config)
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         mjx_state = self._env.reset(key)

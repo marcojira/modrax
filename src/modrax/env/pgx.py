@@ -53,7 +53,7 @@ class PGXConfig(EnvConfig):
 
 
 class PGXEnv(Env):
-    def __init__(self, config: PGXConfig, jit: bool = True):
+    def __init__(self, config: PGXConfig):
         if config.env_name in MINATAR_ENV_MAP:
             env_cls = MINATAR_ENV_MAP[config.env_name]
             self._env = env_cls(sticky_action_prob=config.sticky_action_prob)
@@ -63,8 +63,7 @@ class PGXEnv(Env):
         self.obs_shape = self._env.observation_shape
         self.action_size = self._env.num_actions
 
-        # Call parent init to setup functions
-        super().__init__(config, jit=jit)
+        super().__init__(config)
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         pgx_state = self._env.init(key)

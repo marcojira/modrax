@@ -44,7 +44,6 @@ class TrainConfig(Config):
     seed: int
 
     eval_interval: int = 0
-    jit: bool = True
 
     wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False

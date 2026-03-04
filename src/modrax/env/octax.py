@@ -39,7 +39,7 @@ class OctaxConfig(EnvConfig):
 
 
 class OctaxEnv(Env):
-    def __init__(self, config: OctaxConfig, jit: bool = True):
+    def __init__(self, config: OctaxConfig):
         self._env, self._metadata = create_environment(config.env_name)
 
         # Get observation shape by doing a dummy reset
@@ -50,8 +50,7 @@ class OctaxEnv(Env):
         self.obs_shape = dummy_obs.shape
         self.action_size = self._env.num_actions
 
-        # Call parent init to setup functions
-        super().__init__(config, jit=jit)
+        super().__init__(config)
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         env_state, obs, info = self._env.reset(key)

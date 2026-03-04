@@ -1,25 +1,27 @@
-from typing import Callable
-
 import jax
 import jax.numpy as jnp
 from flax import nnx
-from jaxtyping import Array, Float, Int, Key
+from jaxtyping import Array, Float, Key
 
-from modrax.env.base import StateWithMetrics
+from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 
 
+@nnx.jit(static_argnames=["env", "num_envs", "max_steps", "num_trajectories"])
 def eval_rollout(
+    env: Env,
     network: Network,
-    step_fn: Callable,
-    env_state: StateWithMetrics,
+    num_envs: int,
     key: Key[Array, ""],
     max_steps: int = 1000,
     num_trajectories: int = 10,
-) -> tuple[Float[Array, " B"], Int[Array, " B"], StateWithMetrics]:
-    """Scan for max_steps, return episode returns, lengths, and full trajectories."""
-    # Return limited trajectories for memory reasons
-    num_envs = env_state.obs.shape[0]
+) -> tuple[dict[str, Float[Array, ""]], StateWithMetrics]:
+    """Run evaluation episodes and return mean metrics + trajectories.
+
+    Resets the env, runs up to max_steps, and tracks the first completed episode per env.
+    If an env never finishes, its accumulated return/length at max_steps is used.
+    """
+    eval_env_state = env.reset(jax.random.split(key, num_envs))
 
     def step(carry, step_key):
         network, env_state, done_mask, ep_returns, ep_lengths = carry
@@ -27,7 +29,7 @@ def eval_rollout(
 
         action, _ = network.policy(env_state, policy_key)
         env_keys = jax.random.split(env_key, num_envs)
-        step_output, new_env_state = step_fn(env_state, action, env_keys)
+        step_output, new_env_state = env.step(env_state, action, env_keys)
         network.reset(step_output.done)
 
         first_done = step_output.done & ~done_mask
@@ -48,7 +50,7 @@ def eval_rollout(
     )(
         (
             network,
-            env_state,
+            eval_env_state,
             jnp.zeros(num_envs, dtype=jnp.bool_),
             jnp.zeros(num_envs),
             jnp.zeros(num_envs, dtype=jnp.int32),
@@ -60,4 +62,8 @@ def eval_rollout(
     episode_returns = jnp.where(done_mask, episode_returns, final_env_state.episode_return)
     episode_lengths = jnp.where(done_mask, episode_lengths, final_env_state.episode_length)
 
-    return episode_returns, episode_lengths, trajectories
+    metrics = {
+        "eval_return": episode_returns.mean(),
+        "eval_length": episode_lengths.mean(),
+    }
+    return metrics, trajectories

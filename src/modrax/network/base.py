@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, Int, Key
 
+from modrax.env.base import StateWithMetrics
 from modrax.types import Config
 
 
@@ -17,6 +19,13 @@ class NetworkConfig(Config):
 
 class Network(nnx.Module):
     """Base class for all network types. Enables loading/saving functionality"""
+
+    def policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Int[Array, " B"], Any]:
+        """Select actions given the current env state. Returns (actions, network_output)
+        where network_output contains algorithm-specific data stored during rollout collection."""
+        raise NotImplementedError
 
     def reset(self, done: Float[Array, " B"]):
         return

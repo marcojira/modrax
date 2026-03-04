@@ -204,11 +204,9 @@ class SACAlg(Alg):
         optimizer: SACOptimizer,
         alg_cfg: SACConfig,
         key: Key[Array, ""],
-        jit: bool = False,
     ):
         self.env = env
         self.cfg = alg_cfg
-        self.jit = jit
 
         network.eval()
         self.target_entropy = -0.5 * env.action_size
@@ -223,13 +221,13 @@ class SACAlg(Alg):
         transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), trajectories)
 
         # Init buffer
-        self.buffer = ReplayBuffer(max_size=alg_cfg.buffer_size, jit=jit)
+        self.buffer = ReplayBuffer(max_size=alg_cfg.buffer_size)
         buffer_state = self.buffer.init(transitions)
         buffer_state = self.buffer.add(buffer_state, transitions)
 
         self.env_steps_per_epoch = alg_cfg.num_envs * alg_cfg.iterations_per_epoch
         self.state = SACState(nnx.split((network, optimizer)), env_state, buffer_state)
-        self.loop = nnx.scan(nnx.jit(self._loop)) if self.jit else nnx.scan(self._loop)
+        self.loop = nnx.scan(nnx.jit(self._loop))
 
     def _loop(self, state: SACState, key: Key[Array, ""]):
         env_state, buffer_state = state.env_state, state.buffer_state

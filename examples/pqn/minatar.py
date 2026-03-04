@@ -103,7 +103,7 @@ def main():
     env = GymnaxEnv(cfg.env_cfg)
     network = MinatarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(cfg.seed))
     optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
-    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
+    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key)
 
     train(env, network, optimizer, alg, cfg)
 

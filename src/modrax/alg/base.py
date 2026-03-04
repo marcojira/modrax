@@ -18,13 +18,11 @@ class Alg(ABC):
         optimizer: Optimizer,
         cfg,
         key: Key[Array, ""],
-        jit: bool = False,
     ):
         self.env = env
         self.network = network
         self.optimizer = optimizer
         self.cfg = cfg
-        self.jit = jit
 
     @abstractmethod
     def __call__(self, key: Key[Array, ""]) -> dict[str, float]:

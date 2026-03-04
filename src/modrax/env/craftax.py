@@ -23,7 +23,7 @@ class CraftaxConfig(EnvConfig):
 
 
 class CraftaxEnv(Env):
-    def __init__(self, config: CraftaxConfig, jit: bool = True):
+    def __init__(self, config: CraftaxConfig):
         self._env = make_craftax_env_from_name(config.env_name, auto_reset=False)
         self._env_params = self._env.default_params
 
@@ -31,8 +31,7 @@ class CraftaxEnv(Env):
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
         self.action_size = self._env.action_space(self._env_params).n  # type: ignore
 
-        # Call parent init to setup functions
-        super().__init__(config, jit=jit)
+        super().__init__(config)
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         obs, craftax_state = self._env.reset(key, self._env_params)

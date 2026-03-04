@@ -48,15 +48,14 @@ class GymnaxConfig(EnvConfig):
 
 
 class GymnaxEnv(Env):
-    def __init__(self, config: GymnaxConfig, jit: bool = True):
+    def __init__(self, config: GymnaxConfig):
         self._env, self._env_params = gymnax.make(config.env_name)
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
         self.action_size = self._env.action_space(self._env_params).n  # type: ignore
 
-        # Call parent init to setup functions
-        super().__init__(config, jit=jit)
+        super().__init__(config)
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         obs, gymnax_state = self._env.reset(key, self._env_params)

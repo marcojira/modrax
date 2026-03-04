@@ -5,6 +5,7 @@ from typing import Any, NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from flax import nnx
 from jaxtyping import Array, Bool, Float, Int, Key
 
 from modrax.types import Config, Shape
@@ -52,116 +53,135 @@ class Env:
     action_size: int
     config: EnvConfig
 
-    def __init__(self, config: EnvConfig, jit: bool = True):
+    def __init__(self, config: EnvConfig):
         if config.optimistic_reset and not config.auto_reset:
             print("Optimistic resets require auto_reset=True. Proceeding with auto_resets")
             config.auto_reset = True
 
         self.config = config
-        maybe_jit = jax.jit if jit else lambda f: f
 
-        def _reset_with_metrics(key: Key[Array, ""]) -> StateWithMetrics:
-            state = self._inner_reset_fn(key)
-            return StateWithMetrics(
-                env_state=state.env_state,
-                obs=state.obs,
-                action_mask=state.action_mask,
-                info=state.info,
-                episode_return=jnp.zeros(()),
-                episode_length=jnp.zeros((), dtype=jnp.int32),
+    def _reset_single(self, key: Key[Array, ""]) -> StateWithMetrics:
+        """Reset a single environment and wrap with metrics."""
+        state = self._inner_reset_fn(key)
+        return StateWithMetrics(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            info=state.info,
+            episode_return=jnp.zeros(()),
+            episode_length=jnp.zeros((), dtype=jnp.int32),
+        )
+
+    def _step_single(
+        self,
+        state: StateWithMetrics,
+        reset_state: StateWithMetrics,
+        action: Float[Array, "..."],
+        key: Key[Array, ""],
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step a single environment with auto-reset and metric tracking."""
+        inner_state = State(
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            info=state.info,
+        )
+        step_output, new_state = self._inner_step_fn(inner_state, action, key)
+
+        if self.config.auto_reset:
+            new_state = jax.lax.cond(
+                step_output.done > 0,
+                lambda: State(
+                    env_state=reset_state.env_state,
+                    obs=reset_state.obs,
+                    action_mask=reset_state.action_mask,
+                    info=reset_state.info,
+                ),
+                lambda: new_state,
             )
+            episode_return = (state.episode_return + step_output.reward) * (1 - step_output.done)
+            episode_length = jnp.int32((state.episode_length + 1) * (1 - step_output.done))
+        else:
+            episode_return = state.episode_return + step_output.reward
+            episode_length = state.episode_length + 1
 
-        def _step_with_metrics(
-            state: StateWithMetrics,
-            reset_state: StateWithMetrics,
-            action: Float[Array, "..."],
-            key: Key[Array, ""],
-        ) -> tuple[StepOutput, StateWithMetrics]:
-            inner_state = State(
-                env_state=state.env_state,
-                obs=state.obs,
-                action_mask=state.action_mask,
-                info=state.info,
-            )
-            step_output, new_state = self._inner_step_fn(inner_state, action, key)
+        return step_output, StateWithMetrics(
+            env_state=new_state.env_state,
+            obs=new_state.obs,
+            action_mask=new_state.action_mask,
+            info=new_state.info,
+            episode_return=episode_return,
+            episode_length=episode_length,
+        )
 
-            if config.auto_reset:
-                new_state = jax.lax.cond(
-                    step_output.done > 0,
-                    lambda: State(
-                        env_state=reset_state.env_state,
-                        obs=reset_state.obs,
-                        action_mask=reset_state.action_mask,
-                        info=reset_state.info,
-                    ),
-                    lambda: new_state,
-                )
-                episode_return = (state.episode_return + step_output.reward) * (
-                    1 - step_output.done
-                )
-                episode_length = jnp.int32((state.episode_length + 1) * (1 - step_output.done))
-            else:
-                episode_return = state.episode_return + step_output.reward
-                episode_length = state.episode_length + 1
+    @nnx.jit(static_argnames=["self"])
+    def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
+        """Reset B environments in parallel.
 
-            return step_output, StateWithMetrics(
-                env_state=new_state.env_state,
-                obs=new_state.obs,
-                action_mask=new_state.action_mask,
-                info=new_state.info,
-                episode_return=episode_return,
-                episode_length=episode_length,
-            )
+        Args:
+            keys: B PRNG keys, one per environment.
 
-        vmapped_reset = jax.vmap(_reset_with_metrics)
-        vmapped_step = jax.vmap(_step_with_metrics)
+        Returns:
+            StateWithMetrics with episode_return and episode_length initialized to 0.
+        """
+        return jax.vmap(self._reset_single)(keys)
 
-        def _batch_step(
-            state: StateWithMetrics, action: Float[Array, "B ..."], keys: Key[Array, " B"]
-        ) -> tuple[StepOutput, StateWithMetrics]:
-            if config.optimistic_reset:
-                num_resets = config.num_reset_envs
-                reset_keys = jax.random.split(keys[0], num_resets)
-                reset_state = jax.vmap(_reset_with_metrics)(reset_keys)
-                indices = jax.vmap(lambda k: jax.random.choice(k, jnp.arange(num_resets)))(keys)
-                reset_state = jax.tree.map(lambda x: x[indices], reset_state)
-            else:
-                reset_state = vmapped_reset(keys) if config.auto_reset else state
-            return vmapped_step(state, reset_state, action, keys)
+    @nnx.jit(static_argnames=["self"])
+    def step(
+        self,
+        state: StateWithMetrics,
+        action: Float[Array, "B ..."],
+        keys: Key[Array, " B"],
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step B environments in parallel.
 
-        self.reset = maybe_jit(vmapped_reset)
-        self.step = maybe_jit(_batch_step)
+        Handles auto-reset and optimistic resets based on config.
 
-    def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
-        """Reset environment and return State. Subclasses must override this."""
-        raise NotImplementedError("Subclasses must implement _inner_reset_fn")
+        Args:
+            state: Current batched environment state with metrics.
+            action: Batched actions, one per environment.
+            keys: B PRNG keys for stochastic transitions and resets.
 
-    def _inner_step_fn(
-        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
-    ) -> tuple[StepOutput, State]:
-        """Step environment and return (StepOutput, State). Subclasses must override this."""
-        raise NotImplementedError("Subclasses must implement _inner_step_fn")
+        Returns:
+            Tuple of (StepOutput, StateWithMetrics)
+        """
+        if self.config.optimistic_reset:
+            num_resets = self.config.num_reset_envs
+            reset_keys = jax.random.split(keys[0], num_resets)
+            reset_state = jax.vmap(self._reset_single)(reset_keys)
+            indices = jax.vmap(lambda k: jax.random.choice(k, jnp.arange(num_resets)))(keys)
+            reset_state = jax.tree.map(lambda x: x[indices], reset_state)
+        elif self.config.auto_reset:
+            reset_state = jax.vmap(self._reset_single)(keys)
+        else:
+            reset_state = state
+
+        return jax.vmap(self._step_single)(state, reset_state, action, keys)
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
-        """
-        Render a single environment state to RGB image.
-        Returns RGB image np.array of shape (H, W, 3) with dtype uint8
-        """
+        """Render a single environment state to RGB image (H, W, 3) uint8."""
         raise NotImplementedError("Subclasses must implement render")
 
     def batch_render(self, states: StateWithMetrics) -> np.ndarray:
-        """Render a batch of states, returning array of shape (B, H, W, 3) with dtype uint8."""
+        """Render a batch of states [B ...], returning array of shape (B, H, W, 3) uint8."""
         frames = [
             self.render(jax.tree.map(lambda x: x[i], states)) for i in range(states.obs.shape[0])
         ]
         return np.stack(frames)
 
     def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
-        """Sample random actions for multiple environments.
-
-        Returns actions with shape (num_envs,).
-        """
+        """Sample random actions for num_envs environments."""
         return jax.random.randint(key, (num_envs,), 0, self.action_size)
+
+    def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
+        """Reset a single environment. Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_reset_fn")
+
+    def _inner_step_fn(
+        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
+    ) -> tuple[StepOutput, State]:
+        """Step a single environment. Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_step_fn")
 
     def __hash__(self) -> int:
         """Hash based on config."""

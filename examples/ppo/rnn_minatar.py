@@ -108,7 +108,7 @@ def main():
         env.obs_shape, env.action_size, cfg.alg_cfg.num_envs, cfg.network_cfg, nnx.Rngs(cfg.seed)
     )
     optimizer = Optimizer(cfg.optimizer_cfg, network)
-    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
+    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key)
 
     train(env, network, optimizer, alg, cfg)
 

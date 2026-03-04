@@ -156,9 +156,8 @@ class PQNAlg(Alg):
         optimizer: Optimizer,
         cfg: PQNConfig,
         key: Key[Array, ""],
-        jit: bool = False,
     ):
-        super().__init__(env, network, optimizer, cfg, key, jit)
+        super().__init__(env, network, optimizer, cfg, key)
         self.total_steps = cfg.total_steps
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps
         self.num_epochs = self.total_steps // self.env_steps_per_epoch
@@ -170,9 +169,7 @@ class PQNAlg(Alg):
 
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PQNState(nnx.split((self.network, self.optimizer)), env_state, 0)
-        self.loop = nnx.jit(self._loop) if self.jit else self._loop
-        self.eval_loop = nnx.jit(self._eval_loop) if self.jit else self._eval_loop
-
+        self.loop = nnx.jit(self._loop)
     def _loop(self, state: PQNState, key):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
@@ -232,16 +229,6 @@ class PQNAlg(Alg):
         self.state, metrics = self.loop(self.state, key)
         return metrics
 
-    def _eval_loop(self, network, key):
-        eval_env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
-        episode_returns, episode_lengths, trajectories = eval_rollout(
-            network, self.env.step, eval_env_state, key, max_steps=1000
-        )
-        return {
-            "eval_return": episode_returns.mean(),
-            "eval_length": episode_lengths.mean(),
-        }, trajectories
-
     def eval(self, key):
         network, _ = nnx.merge(*self.state.agent_state)
         network = nnx.clone(network)
@@ -250,4 +237,4 @@ class PQNAlg(Alg):
         if network.is_recurrent:
             network.reset(jnp.ones(self.cfg.num_envs))
 
-        return self.eval_loop(network, key)
+        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=1000)

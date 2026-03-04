@@ -386,11 +386,9 @@ class MRQAlg(Alg):
         optimizer: Optimizer,
         alg_cfg: MRQConfig,
         key: Key[Array, ""],
-        jit: bool = False,
     ):
         self.env = env
         self.cfg = alg_cfg
-        self.jit = jit
         self.max_h = max(alg_cfg.encoder_horizon, alg_cfg.reward_horizon)
 
         # Setup
@@ -398,15 +396,9 @@ class MRQAlg(Alg):
         target_network = nnx.clone(network)
 
         self.env_steps_per_epoch = alg_cfg.num_envs * alg_cfg.num_gen_steps
-        self.loop = nnx.scan(nnx.jit(self._loop)) if jit else nnx.scan(self._loop)
-        self.encoder_loop = (
-            nnx.scan(nnx.jit(self._encoder_step)) if jit else nnx.scan(self._encoder_step)
-        )
-        self.gen_sample = (
-            nnx.jit(self._gen_sample, static_argnames=["random_action"])
-            if jit
-            else self._gen_sample
-        )
+        self.loop = nnx.scan(nnx.jit(self._loop))
+        self.encoder_loop = nnx.scan(nnx.jit(self._encoder_step))
+        self.gen_sample = nnx.jit(self._gen_sample, static_argnames=["random_action"])
 
         # Generate trajectories for buffer initialization
         env_state = self.env.reset(jax.random.split(key, alg_cfg.num_envs))
@@ -416,7 +408,7 @@ class MRQAlg(Alg):
         )
 
         # Initialize buffer
-        self.buffer = ReplayBuffer(max_size=alg_cfg.buffer_size, jit=jit)
+        self.buffer = ReplayBuffer(max_size=alg_cfg.buffer_size)
         sample = make_sample_from_trajectory(trajectory, self.cfg)
         buffer_state = self.buffer.init(sample)
 

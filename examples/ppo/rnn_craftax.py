@@ -118,7 +118,7 @@ def main(cfg):
     optimizer = Optimizer(
         cfg.optimizer_cfg, network, total_num_updates=compute_total_updates(cfg.alg_cfg)
     )
-    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key, jit=True)
+    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key)
 
     train(env, network, optimizer, alg, cfg)
 

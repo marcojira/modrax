@@ -10,7 +10,7 @@ import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 from flax import nnx
-from jaxtyping import Array, Key, PyTree
+from jaxtyping import Array, Float, Key, PyTree
 from rich import print
 
 from modrax.env.base import Env, StateWithMetrics
@@ -116,7 +116,7 @@ def make_trajectory_minibatches(data: PyTree, key: Key[Array, ""], minibatch_siz
     return minibatches
 
 
-def make_transition_minibatches(all_data: dict, key: Key[Array, ""], minibatch_size: int):
+def make_transition_minibatches(all_data: PyTree, key: Key[Array, ""], minibatch_size: int):
     """Create minibatches by flattening B x T, shuffling all transitions, then batching."""
     flat_data = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), all_data)
     num_samples = jax.tree.leaves(flat_data)[0].shape[0]
@@ -134,8 +134,18 @@ def make_transition_minibatches(all_data: dict, key: Key[Array, ""], minibatch_s
 
 
 def update_network_minibatches(
-    network: Network, optimizer: Optimizer, minibatches: Any, loss_fn: Callable, config
+    network: Network,
+    optimizer: Optimizer,
+    minibatches: Any,
+    loss_fn: Callable[[Network, Any, Any], tuple[Float[Array, ""], dict]],
+    config,
 ):
+    """Efficiently scan loss computation and gradient updates over minibatches.
+    See https://flax.readthedocs.io/en/stable/guides/performance.html
+
+    loss_fn(network, minibatch, config) -> (scalar_loss, info_dict)
+    """
+
     def _update(graph_state, minibatch: Any):
         graphdef, state = graph_state
         network, optimizer = nnx.merge(graphdef, state)

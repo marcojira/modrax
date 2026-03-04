@@ -29,17 +29,16 @@ def main():
         optimizer_config=optimizer_config,
         alg_config=alg_config,
         total_steps=10_000_000,
-        jit=True,
         save_path="out/examples/mrq-minatar-asterix",
     )
 
-    env = Env(env_config, jit=train_config.jit)
+    env = Env(env_config)
     network = MRQNetwork(
         env.obs_shape, env.action_size, network_config, nnx.Rngs(train_config.seed)
     )
     optimizer = Optimizer(optimizer_config, network)
     alg = MRQAlg(
-        env, network, optimizer, alg_config, jax.random.key(train_config.seed), jit=train_config.jit
+        env, network, optimizer, alg_config, jax.random.key(train_config.seed)
     )
 
     trained_network = train(env, network, optimizer, alg, train_config)

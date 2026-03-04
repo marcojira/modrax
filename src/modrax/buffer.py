@@ -22,18 +22,15 @@ class ReplayBuffer:
         max_size: int,
         alpha: float = 0.0,  # Priority exponent (0 = uniform, 1 = full prioritization).
         beta: float = 0.4,  # Importance sampling exponent for bias correction.
-        jit: bool = True,
     ):
         self.max_size = max_size
         self.alpha = alpha
         self.beta = beta
 
-        maybe_jit = jax.jit if jit else lambda f, **_: f
-
         # Public API
-        self.add = maybe_jit(self._add)
-        self.sample = maybe_jit(self._sample, static_argnames=("batch_size",))
-        self.update_priorities = maybe_jit(self._update_priorities)
+        self.add = jax.jit(self._add)
+        self.sample = jax.jit(self._sample, static_argnames=("batch_size",))
+        self.update_priorities = jax.jit(self._update_priorities)
 
     def init(self, sample: Any) -> BufferState:
         """Initialize buffer state from a sample pytree."""

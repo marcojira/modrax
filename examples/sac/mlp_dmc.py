@@ -99,17 +99,16 @@ def main():
         optimizer_config=optimizer_config,
         alg_config=alg_config,
         total_steps=100_000_000,
-        jit=True,
         save_path=None,
     )
 
-    env = Env(env_config, jit=train_config.jit)
+    env = Env(env_config)
     network = MuJoCoSACNetwork(
         env.obs_shape, env.action_size, network_config, nnx.Rngs(train_config.seed)
     )
     optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, optimizer_config)
     alg = SACAlg(
-        env, network, optimizer, alg_config, jax.random.key(train_config.seed), jit=train_config.jit
+        env, network, optimizer, alg_config, jax.random.key(train_config.seed)
     )
 
     trained_network = train(env, network, optimizer, alg, train_config)
