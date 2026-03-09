@@ -6,6 +6,7 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
+from craftax.craftax.constants import Achievement
 from craftax.craftax_env import make_craftax_env_from_name
 from jaxtyping import Array, Key
 
@@ -40,6 +41,7 @@ class CraftaxEnv(Env):
             env_state=craftax_state,
             obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
+            info=self._achievements_info(craftax_state),
         )
 
     def _inner_step_fn(
@@ -56,9 +58,15 @@ class CraftaxEnv(Env):
             env_state=craftax_state,
             obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
+            info=self._achievements_info(craftax_state),
         )
 
         return step_output, new_state
+
+    @staticmethod
+    def _achievements_info(craftax_state) -> dict:
+        achievements = craftax_state.achievements * 100.0
+        return {a.name.lower(): achievements[a.value] for a in Achievement}
 
     def _get_renderer(self):
         if "Classic" in self.config.env_name:

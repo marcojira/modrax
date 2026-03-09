@@ -80,7 +80,7 @@ def log_trajectories(
             path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
             iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
         if config.save_gif_wandb and config.wandb.enabled:
-            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="gif")
+            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="mp4")
             wandb.log({f"eval_trajectories/traj_{i}": video})
 
 
@@ -135,7 +135,7 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         metrics["steps/s"] = total_steps / (time.time() - start)
 
         formatted_metrics = format_metrics(metrics)
-        pbar.set_postfix(formatted_metrics)
+        pbar.set_postfix({k: v for k, v in formatted_metrics.items() if not k.startswith("info/")})
 
         log_metrics(formatted_metrics, cfg, "metrics.jsonl")
 

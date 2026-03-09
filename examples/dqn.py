@@ -15,7 +15,7 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.transitions_rollout import transitions_rollout
-from modrax.training import TrainConfig, train
+from modrax.training import TrainConfig, WandbConfig, train
 from modrax.utils import (
     compute_training_metrics,
     make_transition_minibatches,
@@ -49,9 +49,12 @@ class Config(TrainConfig):
     optimizer_cfg: OptimizerConfig = OptimizerConfig(
         optimizer_type="adam", learning_rate=3e-4, gradient_clip=2.0
     )
+    wandb: WandbConfig = WandbConfig(enabled=True, project="modrax")
     alg_cfg: AlgConfig = AlgConfig()
     eval_interval: int = 25
     seed: int = 0
+    save_gif_wandb: bool = True
+    num_gif_trajectories: int = 2
 
 
 """ NETWORK """

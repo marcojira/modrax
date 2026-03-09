@@ -35,23 +35,25 @@ def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
     return rgb_array
 
 
+def mean_episode_metric(values: Float[Array, "..."], dones: Float[Array, "..."]) -> Array:
+    """Compute done-weighted mean of a per-step metric."""
+    num_dones = jnp.sum(dones)
+    return jnp.sum(values * dones) / jnp.maximum(num_dones, 1)
+
+
 def compute_training_metrics(trajectory: Any):
     """Compute standard training metrics from trajectory and update infos."""
-    num_dones = jnp.sum(trajectory.dones)
-
-    mean_ep_return = jnp.sum(trajectory.episode_returns * trajectory.dones) / jnp.maximum(
-        num_dones, 1
-    )
-    mean_ep_length = jnp.sum(trajectory.episode_lengths * trajectory.dones) / jnp.maximum(
-        num_dones, 1
-    )
-    mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
-
-    return {
-        "Rew.": mean_traj_reward,
-        "Ep.Ret.": mean_ep_return,
-        "Ep.Len.": mean_ep_length,
+    metrics = {
+        "Rew.": trajectory.rewards.sum(axis=1).mean(),
+        "Ep.Ret.": mean_episode_metric(trajectory.episode_returns, trajectory.dones),
+        "Ep.Len.": mean_episode_metric(trajectory.episode_lengths, trajectory.dones),
     }
+
+    if isinstance(trajectory.info, dict):
+        for key, value in trajectory.info.items():
+            metrics[f"info/{key}"] = mean_episode_metric(value, trajectory.dones)
+
+    return metrics
 
 
 def to_python_float(value: Any, ndigits: int = 4) -> float:
@@ -134,7 +136,7 @@ def make_transition_minibatches(all_data: PyTree, key: Key[Array, ""], minibatch
 
 
 def update_network_minibatches(
-    network: Network,
+    network: nnx.Module,
     optimizer: Optimizer,
     minibatches: Any,
     loss_fn: Callable[[Network, Any, Any], tuple[Float[Array, ""], dict]],

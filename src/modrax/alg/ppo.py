@@ -37,10 +37,6 @@ class PPOConfig(Config):
     num_minibatches: int = 8
     num_updates: int = 3
 
-    start_eps: float = 0.0
-    end_eps: float = 0.0
-    eps_decay: float = 0.0
-
 
 """ NETWORK """
 
@@ -182,10 +178,6 @@ class PPOAlg(Alg):
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
         self.num_epochs = self.total_steps // self.env_steps_per_epoch
 
-        self.eps_scheduler = optax.linear_schedule(
-            cfg.start_eps, cfg.end_eps, int(cfg.eps_decay * self.num_epochs)
-        )
-
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
         self.loop = nnx.jit(self._loop)
@@ -193,9 +185,6 @@ class PPOAlg(Alg):
     def _loop(self, state: PPOState, key: Key[Array, ""]):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
-
-        # Update epsilon
-        network.eps = self.eps_scheduler(state.step)
 
         # Generate data
         init_carry = network.get_carry()
@@ -234,7 +223,6 @@ class PPOAlg(Alg):
     def eval(self, key):
         network, _ = nnx.merge(*self.state.agent_state)
         network = nnx.clone(network)
-        network.eps = 0.0
 
         if network.is_recurrent:
             network.reset(jnp.ones(self.cfg.num_envs))
