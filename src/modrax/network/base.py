@@ -1,30 +1,37 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
-from pydantic import BaseModel
+from jaxtyping import Array, Float, Int, Key
 
-from modrax.types import Shape
+from modrax.env.base import StateWithMetrics
+from modrax.types import Config
 
 
-class NetworkConfig(BaseModel):
+@dataclass
+class NetworkConfig(Config):
     pass
 
 
 class Network(nnx.Module):
     """Base class for all network types. Enables loading/saving functionality"""
 
-    def __init__(
-        self,
-        obs_shape: Shape,
-        num_actions: int,
-        config: NetworkConfig,
-        rngs: nnx.Rngs,
-    ):
-        pass
+    def policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Int[Array, " B"], Any]:
+        """Select actions given the current env state. Returns (actions, network_output)
+        where network_output contains algorithm-specific data stored during rollout collection."""
+        raise NotImplementedError
+
+    def reset(self, done: Float[Array, " B"]):
+        return
+
+    def get_carry(self):
+        return None
 
     def save(self, checkpoint_dir_path: str) -> None:
         """Save network to checkpoint directory.
@@ -52,7 +59,7 @@ class Network(nnx.Module):
         # Orbax needs absolute path
         checkpoint_path = os.path.abspath(checkpoint_path)
 
-        # TODO: potentially better to use abstract state her (see https://flax.readthedocs.io/en/latest/guides/checkpointing.html)
+        # TODO: potentially better to use abstract state here (see https://flax.readthedocs.io/en/latest/guides/checkpointing.html)
         graphdef, state = nnx.split(self)
 
         # Restore the actual state using orbax
@@ -60,9 +67,3 @@ class Network(nnx.Module):
         restored_state = checkpointer.restore(os.path.join(checkpoint_path, "params"), state)
 
         return nnx.merge(graphdef, restored_state)
-
-    def __call__(self, *args, **kwargs) -> Any:
-        pass
-
-    def train_forward(self, *args, **kwargs) -> Any:
-        pass

@@ -1,7 +1,10 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TypeAlias
 
 Shape: TypeAlias = Sequence[int]
 
-OBS_SHAPE = None
-NUM_ACTIONS = None
+
+@dataclass
+class Config:
+    pass

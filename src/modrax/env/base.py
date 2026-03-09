@@ -1,17 +1,18 @@
+import dataclasses
+from dataclasses import dataclass
 from typing import Any, NamedTuple
-from warnings import WarningMessage
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+from flax import nnx
 from jaxtyping import Array, Bool, Float, Int, Key
-from pydantic import BaseModel
 
-from modrax.types import Shape
-from modrax.utils import pprint
+from modrax.types import Config, Shape
 
 
-class EnvConfig(BaseModel):
+@dataclass
+class EnvConfig(Config):
     env_name: str = ""
     auto_reset: bool = True
     optimistic_reset: bool = False
@@ -43,77 +44,106 @@ class StateWithMetrics(NamedTuple):
 class StepOutput(NamedTuple):
     reward: Float[Array, ""]
     done: Bool[Array, ""]
+    truncation: Bool[Array, ""]
     info: Any
 
 
 class Env:
     obs_shape: Shape
-    num_actions: int
+    action_size: int
     config: EnvConfig
 
-    def __new__(cls, config: EnvConfig, jit: bool = True):
-        """Factory method to create appropriate Env subclass based on config type."""
-        # If called on base Env class, dispatch to appropriate subclass
-        if cls is Env:
-            from modrax.env.craftax_env import CraftaxEnv, CraftaxEnvConfig
-            from modrax.env.gymnax_env import GymnaxEnv, GymnaxEnvConfig
-            from modrax.env.octax_env import OctaxEnv, OctaxEnvConfig
-            from modrax.env.pgx_env import PGXEnv, PGXEnvConfig
-
-            if isinstance(config, PGXEnvConfig):
-                return PGXEnv(config, jit)
-            elif isinstance(config, CraftaxEnvConfig):
-                return CraftaxEnv(config, jit)
-            elif isinstance(config, OctaxEnvConfig):
-                return OctaxEnv(config, jit)
-            elif isinstance(config, GymnaxEnvConfig):
-                return GymnaxEnv(config, jit)
-            else:
-                raise ValueError(f"Unknown env config type: {type(config)}")
-        else:
-            # If called on a subclass, use normal instantiation
-            return super().__new__(cls)
-
-    def __init__(self, config: EnvConfig, jit: bool = True):
+    def __init__(self, config: EnvConfig):
         if config.optimistic_reset and not config.auto_reset:
             print("Optimistic resets require auto_reset=True. Proceeding with auto_resets")
-            self.config.auto_reset = True
+            config.auto_reset = True
 
         self.config = config
-        self._setup_fns(jit=jit)
 
-    def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
-        """Reset environment and return State. Subclasses must override this."""
-        raise NotImplementedError("Subclasses must implement _inner_reset_fn")
+    @nnx.jit(static_argnames=["self"])
+    def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
+        """Reset B environments in parallel.
 
-    def _inner_step_fn(
-        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
-    ) -> tuple[StepOutput, State]:
-        """Step environment and return (StepOutput, State). Subclasses must override this."""
-        raise NotImplementedError("Subclasses must implement _inner_step_fn")
+        Args:
+            keys: B PRNG keys, one per environment.
 
-    def reset_fn(self, key: Key[Array, ""]) -> StateWithMetrics:
-        """Reset environment with episode metrics initialization."""
+        Returns:
+            StateWithMetrics with episode_return and episode_length initialized to 0.
+        """
+        return jax.vmap(self._reset_single)(keys)
+
+    @nnx.jit(static_argnames=["self"])
+    def step(
+        self,
+        state: StateWithMetrics,
+        action: Float[Array, "B ..."],
+        keys: Key[Array, " B"],
+    ) -> tuple[StepOutput, StateWithMetrics]:
+        """Step B environments in parallel.
+
+        Handles auto-reset and optimistic resets based on config.
+
+        Args:
+            state: Current batched environment state with metrics.
+            action: Batched actions, one per environment.
+            keys: B PRNG keys for stochastic transitions and resets.
+
+        Returns:
+            Tuple of (StepOutput, StateWithMetrics)
+        """
+        if self.config.optimistic_reset:
+            num_resets = self.config.num_reset_envs
+            reset_keys = jax.random.split(keys[0], num_resets)
+            reset_state = jax.vmap(self._reset_single)(reset_keys)
+            indices = jax.vmap(lambda k: jax.random.choice(k, jnp.arange(num_resets)))(keys)
+            reset_state = jax.tree.map(lambda x: x[indices], reset_state)
+        elif self.config.auto_reset:
+            reset_state = jax.vmap(self._reset_single)(keys)
+        else:
+            reset_state = state
+
+        return jax.vmap(self._step_single)(state, reset_state, action, keys)
+
+    def render(self, state: State | StateWithMetrics) -> np.ndarray:
+        """Render a single environment state to RGB image (H, W, 3) uint8."""
+        raise NotImplementedError("Subclasses must implement render")
+
+    def batch_render(self, states: StateWithMetrics) -> np.ndarray:
+        """Render a batch of states [B ...], returning array of shape (B, H, W, 3) uint8."""
+        frames = [
+            self.render(jax.tree.map(lambda x: x[i], states)) for i in range(states.obs.shape[0])
+        ]
+        return np.stack(frames)
+
+    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
+        """Sample random actions for num_envs environments."""
+        return jax.random.randint(key, (num_envs,), 0, self.action_size)
+
+    def _reset_single(self, key: Key[Array, ""]) -> StateWithMetrics:
+        """Reset a single environment and wrap with metrics."""
         state = self._inner_reset_fn(key)
         return StateWithMetrics(
             env_state=state.env_state,
             obs=state.obs,
             action_mask=state.action_mask,
             info=state.info,
-            episode_return=jax.numpy.zeros(()),
-            episode_length=jax.numpy.zeros((), dtype=jax.numpy.int32),
+            episode_return=jnp.zeros(()),
+            episode_length=jnp.zeros((), dtype=jnp.int32),
         )
 
-    def step_fn(
+    def _step_single(
         self,
         state: StateWithMetrics,
         reset_state: StateWithMetrics,
         action: Float[Array, "..."],
         key: Key[Array, ""],
     ) -> tuple[StepOutput, StateWithMetrics]:
-        """Step environment with return/length accumulation and optional auto-reset."""
+        """Step a single environment with auto-reset and metric tracking."""
         inner_state = State(
-            env_state=state.env_state, obs=state.obs, action_mask=state.action_mask, info=state.info
+            env_state=state.env_state,
+            obs=state.obs,
+            action_mask=state.action_mask,
+            info=state.info,
         )
         step_output, new_state = self._inner_step_fn(inner_state, action, key)
 
@@ -134,7 +164,7 @@ class Env:
             episode_return = state.episode_return + step_output.reward
             episode_length = state.episode_length + 1
 
-        new_state_with_metrics = StateWithMetrics(
+        return step_output, StateWithMetrics(
             env_state=new_state.env_state,
             obs=new_state.obs,
             action_mask=new_state.action_mask,
@@ -142,59 +172,17 @@ class Env:
             episode_return=episode_return,
             episode_length=episode_length,
         )
-        return step_output, new_state_with_metrics
 
-    def _setup_fns(self, jit: bool):
-        """Setup vmapped and optionally JIT-compiled functions."""
-        reset_fn = jax.vmap(self.reset_fn)
-        step_fn = jax.vmap(self.step_fn)
+    def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
+        """Reset a single environment. Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_reset_fn")
 
-        def batch_step(
-            state: StateWithMetrics, action: Float[Array, "B ..."], keys: Key[Array, " B"]
-        ) -> tuple[StepOutput, StateWithMetrics]:
-            if self.config.optimistic_reset:
-                num_resets = self.config.num_reset_envs
-                reset_keys = jax.random.split(keys[0], num_resets)
-                reset_state = jax.vmap(self.reset_fn)(reset_keys)
-
-                # Assign a reset state to each environment
-                indices = jax.vmap(lambda k: jax.random.choice(k, jnp.arange(num_resets)))(keys)
-                reset_state = jax.tree.map(lambda x: x[indices], reset_state)
-            else:
-                reset_state = self._reset_fn(keys) if self.config.auto_reset else state
-            return step_fn(state, reset_state, action, keys)
-
-        if jit:
-            reset_fn = jax.jit(reset_fn)
-            batch_step = jax.jit(batch_step)
-
-        self._reset_fn = reset_fn
-        self._step_fn = batch_step
-
-    def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
-        """Reset environments with given keys."""
-        return self._reset_fn(keys)
-
-    def step(
-        self, state: StateWithMetrics, action: Float[Array, "B ..."], keys: Key[Array, " B"]
-    ) -> tuple[StepOutput, StateWithMetrics]:
-        """Step environments with given state, actions, and keys."""
-        return self._step_fn(state, action, keys)
-
-    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
-        """Sample random actions for multiple environments.
-
-        Returns actions with shape (num_envs,).
-        """
-        return jax.random.randint(key, (num_envs,), 0, self.num_actions)
-
-    def render(self, state: State | StateWithMetrics) -> np.ndarray:
-        """
-        Render a single environment state to RGB image.
-        Returns RGB image np.array of shape (H, W, 3) with dtype uint8
-        """
-        raise NotImplementedError("Subclasses must implement render")
+    def _inner_step_fn(
+        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
+    ) -> tuple[StepOutput, State]:
+        """Step a single environment. Subclasses must override this."""
+        raise NotImplementedError("Subclasses must implement _inner_step_fn")
 
     def __hash__(self) -> int:
         """Hash based on config."""
-        return hash(self.config.model_dump_json())
+        return hash(str(dataclasses.asdict(self.config)))

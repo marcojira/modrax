@@ -25,13 +25,14 @@ dependencies = [
     "jaxtyping",
     "requests",
     "opencv-python",
-
+    "wandb[media]",
     # Envs
     "craftax",
     "gymnax",
     "jumanji",
     # "octax", Needs to be installed from source
     "pgx",
+    "playground",
 ]
 
 [project.optional-dependencies]
@@ -49,7 +50,7 @@ allow-direct-references = true
 packages = ["src/modrax"]
 
 [tool.ruff]
-line-length = 100
+line-length = 110
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]

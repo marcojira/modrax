@@ -1,178 +1,164 @@
 """Training utilities for RL algorithms."""
 
+import dataclasses
 import os
-from typing import Any
+import time
+from dataclasses import dataclass, field
+
+import imageio.v3 as iio
+import wandb
+
+from modrax.alg.base import Alg
+from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.types import Config
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
-import jax.numpy as jnp
 from flax import nnx
-from pydantic import BaseModel, SkipValidation
 from rich import print
 from tqdm import tqdm
 
 from modrax.env import Env, EnvConfig
-from modrax.eval import EvalConfig, EvalFn
-from modrax.network.base import Network, NetworkConfig
-from modrax.network.recurrent_network import RecurrentNetwork
-from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.policy import PolicyFn
-from modrax.rollout.base import RolloutConfig, RolloutFn, Trajectory
-from modrax.update.base import UpdateConfig, UpdateFn
-from modrax.utils import pprint, save_metrics_jsonl
+from modrax.env.base import StateWithMetrics
+from modrax.network.base import Network
+from modrax.utils import format_metrics, pprint, render_trajectories, save_metrics_jsonl
 
 
-def compute_training_metrics(trajectory: Trajectory, infos: dict[str, Any]) -> dict[str, float]:
-    """Compute standard training metrics from trajectory and update infos."""
-    num_dones = jnp.sum(trajectory.dones)
-
-    mean_ep_return = jnp.sum(trajectory.episode_returns * trajectory.dones) / jnp.maximum(
-        num_dones, 1
-    )
-    mean_ep_length = jnp.sum(trajectory.episode_lengths * trajectory.dones) / jnp.maximum(
-        num_dones, 1
-    )
-    mean_traj_reward = trajectory.rewards.sum(axis=1).mean()
-
-    infos = {k: info.mean().item() for k, info in infos.items()}
-
-    return {
-        **infos,
-        "Rew.": mean_traj_reward.item(),
-        "Ep.Ret.": mean_ep_return.item(),
-        "Ep.Len.": mean_ep_length.item(),
-    }
+@dataclass
+class WandbConfig:
+    enabled: bool = False
+    project: str = ""
+    entity: str | None = None
+    run_name: str | None = None
+    tags: tuple[str] | None = None
 
 
-def format_metrics(metrics: dict[str, float], precision: int = 3) -> dict[str, str]:
-    """Format numeric metrics as strings for display."""
-    return {key: f"{value:.{precision}f}" for key, value in metrics.items()}
+@dataclass
+class TrainConfig(Config):
+    env_cfg: EnvConfig
+    network_cfg: Config
+    optimizer_cfg: OptimizerConfig
+    alg_cfg: Config
 
+    seed: int
 
-class TrainConfig(BaseModel):
-    """Configuration for training."""
+    eval_interval: int = 0
 
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed: int = 0
-
-    env_config: EnvConfig
-    network_cls: type[Network]
-    network_config: NetworkConfig
-    optimizer_config: OptimizerConfig
-
-    rollout_fn: SkipValidation[RolloutFn]
-    rollout_config: RolloutConfig
-
-    update_fn: SkipValidation[UpdateFn]
-    update_config: SkipValidation[UpdateConfig]
-
-    policy_fn: SkipValidation[PolicyFn]
-
-    eval_interval: int = 25
-    eval_fn: SkipValidation[EvalFn] | None = None
-    eval_config: SkipValidation[EvalConfig] | None = None
-
-    num_envs: int
-    total_steps: int
-    num_epochs: int
-    jit: bool = True
-
+    wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False
     save_path: str | None = None
+    save_gif_wandb: bool = False
+    save_gif_local: bool = False
+    num_gif_trajectories: int = 5
 
 
-def train(config: TrainConfig) -> Network:
+def log_metrics(metrics: dict, config: TrainConfig, filename: str):
+    """Log metrics to wandb and/or save to JSONL."""
+    if config.wandb.enabled:
+        wandb.log(metrics)
+    if config.save_path is not None:
+        save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
+
+
+def log_trajectories(
+    env: Env,
+    trajectories: StateWithMetrics,
+    config: TrainConfig,
+    epoch: int,
+    n_trajectories: int = 2,
+    fps: int = 10,
+):
+    """Render trajectories and log as GIFs to wandb and/or save to disk."""
+    if not (config.save_gif_local or config.save_gif_wandb):
+        return
+
+    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:, :n_trajectories], trajectories))
+
+    for i, frames in enumerate(rendered):
+        if config.save_gif_local and config.save_path is not None:
+            path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
+            iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
+        if config.save_gif_wandb and config.wandb.enabled:
+            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="mp4")
+            wandb.log({f"eval_trajectories/traj_{i}": video})
+
+
+def flatten_cfg(config: TrainConfig) -> dict:
+    """Flatten TrainConfig into a flat dict with prefixed keys for wandb."""
+    flat = {}
+    for f in dataclasses.fields(config):
+        value = getattr(config, f.name)
+        if dataclasses.is_dataclass(value):
+            for inner_f in dataclasses.fields(value):
+                flat[f"{f.name}.{inner_f.name}"] = getattr(value, inner_f.name)
+        else:
+            flat[f.name] = value
+    return flat
+
+
+def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: TrainConfig) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
-    key = jax.random.key(config.seed)
-    key, network_key = jax.random.split(key)
+    key = jax.random.key(cfg.seed)
 
-    # Initialize components
-    env = Env(config.env_config, jit=config.jit)
-    network = config.network_cls(
-        env.obs_shape,
-        env.num_actions,
-        config.network_config,
-        nnx.Rngs(network_key),
-    )
-    optimizer = Optimizer(config.optimizer_config, network)
+    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network, nnx.Param)))
+    print(f"Training a network with {num_params:} parameters...")
 
-    if config.display_network:
+    if cfg.display_network:
         nnx.display(network)
 
-    rollout_fn = config.rollout_fn
-    update_fn = config.update_fn
-
-    if config.jit:
-        rollout_fn = nnx.jit(rollout_fn, static_argnames=["policy_fn", "step_fn", "config"])
-        update_fn = nnx.jit(update_fn, static_argnames=["config"])
-
-    # Initialize state
-    reset_key, key = jax.random.split(key)
-    env_state = env.reset(jax.random.split(reset_key, config.num_envs))
-
-    recurrent_state = None
-    if isinstance(network, RecurrentNetwork):
-        recurrent_state = network.init_recurrent_state(config.num_envs)
-
-    # Training loop
-    num_iterations = config.total_steps // (config.num_envs * config.rollout_config.num_steps)
-    pbar = tqdm(range(num_iterations), desc="Training")
-
-    for iteration in pbar:
-        rollout_key, key = jax.random.split(key)
-
-        network.eval()
-        env_state, recurrent_state, data = rollout_fn(
-            network,
-            config.policy_fn,
-            env.step,
-            env_state,
-            recurrent_state,
-            config.rollout_config,
-            rollout_key,
+    # Wandb
+    if cfg.wandb.enabled:
+        wandb.init(
+            project=cfg.wandb.project,
+            entity=cfg.wandb.entity,
+            name=cfg.wandb.run_name,
+            tags=cfg.wandb.tags,
+            config=flatten_cfg(cfg),
         )
 
-        network.train()
-        for _ in range(config.num_epochs):
-            update_key, key = jax.random.split(key)
-            loss, infos = update_fn(
-                network,
-                optimizer,
-                data,
-                config.update_config,
-                update_key,
-            )
+    # Training loop
+    num_epochs = alg.total_steps // (alg.env_steps_per_epoch)
+    pbar = tqdm(range(num_epochs), desc="Training")
+    start = time.time()
+
+    for epoch in pbar:
+        key, epoch_key = jax.random.split(key)
+
+        # Alg epoch
+        metrics = alg(epoch_key)
 
         # Metrics
-        metrics = compute_training_metrics(data.trajectory, infos)
-        metrics["iteration"] = iteration
-        metrics["steps_M"] = (iteration * config.num_envs * config.rollout_config.num_steps) / 1e6
-        formatted_metrics = format_metrics(metrics)
-        pbar.set_postfix(formatted_metrics)
+        total_steps = epoch * alg.env_steps_per_epoch
+        metrics["epoch"] = epoch
+        metrics["steps_M"] = total_steps / 1e6
+        metrics["steps/s"] = total_steps / (time.time() - start)
 
-        if config.save_path is not None:
-            save_metrics_jsonl(metrics, os.path.join(config.save_path, "metrics.jsonl"))
+        formatted_metrics = format_metrics(metrics)
+        pbar.set_postfix({k: v for k, v in formatted_metrics.items() if not k.startswith("info/")})
+
+        log_metrics(formatted_metrics, cfg, "metrics.jsonl")
 
         # Evaluation
-        if iteration % config.eval_interval == 0:
-            pprint(metrics)  # Print current metrics
+        if cfg.eval_interval and (epoch % cfg.eval_interval == 0 or epoch == num_epochs - 1):
+            eval_key, key = jax.random.split(key)
+            eval_metrics, trajectories = alg.eval(eval_key)
+            eval_metrics["epoch"] = epoch
+            eval_metrics["steps_M"] = total_steps / 1e6
+            eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}
 
-            if config.eval_fn is not None and config.eval_config is not None:
-                network.eval()
-                eval_key, key = jax.random.split(key)
-                eval_metrics = config.eval_fn(network, env, data, config.eval_config, eval_key)
-
-                pprint(eval_metrics)
-                if config.save_path is not None:
-                    save_metrics_jsonl(eval_metrics, os.path.join(config.save_path, "eval.jsonl"))
+            pprint(eval_metrics)
+            log_metrics(eval_metrics, cfg, "eval.jsonl")
+            log_trajectories(env, trajectories, cfg, epoch, n_trajectories=cfg.num_gif_trajectories)
 
     # Save checkpoint
-    if config.save_path is not None:
-        checkpoint_path = os.path.join(config.save_path, "checkpoint")
+    if cfg.save_path is not None:
+        checkpoint_path = os.path.join(cfg.save_path, "checkpoint")
         network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
+
+    if cfg.wandb.enabled:
+        wandb.finish()
 
     print("\nTraining completed!")
     return network

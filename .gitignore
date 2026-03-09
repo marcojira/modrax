@@ -3,6 +3,9 @@ archive/
 CLAUDE.md
 out/
 projects/
+dev.py
+exps/
+*EXP_*
 
 # Python
 __pycache__/
@@ -69,3 +72,4 @@ runs/
 outputs/
 checkpoints/
 wandb/
+exps/
