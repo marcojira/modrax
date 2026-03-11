@@ -13,7 +13,7 @@ from jaxtyping import Array, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxConfig(EnvConfig):
     env_name: Literal[
         "Craftax-Symbolic-v1",

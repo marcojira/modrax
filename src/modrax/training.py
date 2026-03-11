@@ -25,7 +25,7 @@ from modrax.network.base import Network
 from modrax.utils import format_metrics, pprint, render_trajectories, save_metrics_jsonl
 
 
-@dataclass
+@dataclass(frozen=True)
 class WandbConfig:
     enabled: bool = False
     project: str = ""
@@ -34,7 +34,7 @@ class WandbConfig:
     tags: tuple[str] | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrainConfig(Config):
     env_cfg: EnvConfig
     network_cfg: Config

@@ -20,7 +20,7 @@ from modrax.types import Config, Shape
 from modrax.utils import finite_mean, update_network
 
 
-@dataclass
+@dataclass(frozen=True)
 class MRQConfig(Config):
     num_envs: int = 32
     num_gen_steps: int = 256
@@ -46,7 +46,7 @@ class MRQConfig(Config):
     pre_activ_weight: float = 1e-5
 
 
-@dataclass
+@dataclass(frozen=True)
 class MRQNetworkConfig(Config):
     pixel_obs: bool = False
 

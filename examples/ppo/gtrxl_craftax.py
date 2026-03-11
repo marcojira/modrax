@@ -18,7 +18,7 @@ from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxGTrXLNetworkConfig(Config):
     encoder_dim: int = 256
     policy_hidden_dims: tuple[int, ...] = (256, 256)
@@ -32,7 +32,7 @@ class CraftaxGTrXLNetworkConfig(Config):
     cached_train: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxGTrXLPPOConfig(TrainConfig):
     env_cfg: CraftaxConfig = CraftaxConfig(
         env_name="Craftax-Symbolic-v1",

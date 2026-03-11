@@ -25,12 +25,12 @@ from modrax.utils import (
 """ CONFIG """
 
 
-@dataclass
+@dataclass(frozen=True)
 class NetworkConfig:
     hidden_dims: tuple[int, ...] = (128, 128)
 
 
-@dataclass
+@dataclass(frozen=True)
 class AlgConfig:
     eps: float = 0.05
 
@@ -42,7 +42,7 @@ class AlgConfig:
     total_steps: int = 100_000_000
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: NetworkConfig = NetworkConfig()

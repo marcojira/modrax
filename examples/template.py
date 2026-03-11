@@ -21,15 +21,15 @@ from modrax.utils import (
 """ CONFIG """
 
 
-@dataclass
+@dataclass(frozen=True)
 class NetworkConfig: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class AlgConfig: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config(TrainConfig):
     env_cfg: ... = ...
     network_cfg: NetworkConfig = NetworkConfig()

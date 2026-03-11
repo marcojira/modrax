@@ -18,7 +18,7 @@ from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxRNNNetworkConfig(Config):
     encoder_dim: int = 256
     rnn_hidden_dim: int = 256
@@ -28,7 +28,7 @@ class CraftaxRNNNetworkConfig(Config):
     value_hidden_dims: tuple[int, ...] = (256, 256)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxRNNPPOConfig(TrainConfig):
     env_cfg: CraftaxConfig = CraftaxConfig(
         env_name="Craftax-Symbolic-v1",

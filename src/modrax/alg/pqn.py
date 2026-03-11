@@ -22,7 +22,7 @@ from modrax.utils import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class PQNConfig(Config):
     name: str = "PQN"
 

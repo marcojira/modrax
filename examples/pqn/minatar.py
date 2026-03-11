@@ -12,14 +12,14 @@ from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinatarNetworkConfig(Config):
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
     eps: float = 0.1
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinatarConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
