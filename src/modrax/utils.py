@@ -42,7 +42,7 @@ def add_cli(fn: Callable[[ConfigType], Out]):
         if not cfg:
             # Inspect the function to figure out the type of config that needs to be parsed.
             config_type = typing.get_type_hints(fn).popitem()[1]
-            cfg = simple_parsing.parse(config_type, formatter_class=_FormatterClass, description=__doc__)
+            cfg = simple_parsing.parse(config_type, formatter_class=_FormatterClass, description=fn.__doc__)
             assert cfg
         return fn(cfg)
 
