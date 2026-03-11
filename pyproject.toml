@@ -37,13 +37,8 @@ dependencies = [
     "rich-argparse>=1.7.2",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "mypy",
-]
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
