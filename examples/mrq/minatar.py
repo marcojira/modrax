@@ -4,13 +4,18 @@ import jax
 from flax import nnx
 
 from modrax.alg.mrq import MRQAlg, MRQConfig, MRQNetwork, MRQNetworkConfig
-from modrax.env import Env, PGXConfig
+from modrax.env import Env
+from modrax.env.pgx import PGXConfig
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.training import TrainConfig, train
+from modrax.utils import add_cli
 
 
-def main():
-    env_config = PGXConfig(env_name="minatar-asterix", optimistic_reset=False)
+@add_cli
+def main(cfg: PGXConfig):
+    # note, this matches the defaults in the dataclass definition, which are also the default for the CLI.
+    # env_config = PGXConfig(env_name="minatar-asterix", optimistic_reset=False)
+    env_config = cfg
     network_config = MRQNetworkConfig(
         pixel_obs=True,
     )
