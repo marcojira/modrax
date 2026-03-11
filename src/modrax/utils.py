@@ -1,6 +1,7 @@
 """Utility functions."""
 
 import json
+import typing
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,6 +17,36 @@ from rich import print
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
+from modrax.types import Config
+
+Out = typing.TypeVar("Out")
+ConfigType = typing.TypeVar("ConfigType", bound=Config)
+
+
+def add_cli(fn: Callable[[ConfigType], Out]):
+    """Adds the simple command-line interface to run this function.
+
+    The wrapped function should accept a dataclass as its first (and only) argument.
+    When the wrapped function is called with no arguments, this dataclass is obtained
+    from the command-line. When a value is passed, the function behaves as usual.
+    """
+    import rich_argparse
+    import simple_parsing
+
+    # Make the CLI nicer to look at.
+    class _FormatterClass(rich_argparse.RichHelpFormatter, simple_parsing.SimpleHelpFormatter): ...  # type: ignore
+
+    # @functools.wraps(fn)
+    def wrapper(cfg: ConfigType | None = None) -> Out:
+        # If a config is passed, use it. If not, get one from the command-line arguments.
+        if not cfg:
+            # Inspect the function to figure out the type of config that needs to be parsed.
+            config_type = typing.get_type_hints(fn)["cfg"]
+            cfg = simple_parsing.parse(config_type, formatter_class=_FormatterClass, description=__doc__)
+            assert cfg
+        return fn(cfg)
+
+    return wrapper
 
 
 def fig_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:

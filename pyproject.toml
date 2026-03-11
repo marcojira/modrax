@@ -33,6 +33,8 @@ dependencies = [
     # "octax", Needs to be installed from source
     "pgx",
     "playground",
+    "simple-parsing>=0.1.8",
+    "rich-argparse>=1.7.2",
 ]
 
 [project.optional-dependencies]

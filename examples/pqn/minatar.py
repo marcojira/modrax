@@ -10,6 +10,7 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config
+from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
@@ -95,8 +96,8 @@ class MinatarNetwork(PQNNetwork):
         return self.__call__(obs)
 
 
-def main():
-    cfg = MinatarConfig()
+@add_cli
+def main(cfg: MinatarConfig):
     key = jax.random.key(cfg.seed)
 
     # Init objects

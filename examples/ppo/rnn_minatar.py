@@ -16,6 +16,7 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
+from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
@@ -97,9 +98,8 @@ class MinAtarRNNNetwork(PPONetwork):
     def get_carry(self):
         return self.rnn.carry.value
 
-
-def main():
-    cfg = MinAtarRNNConfig()
+@add_cli
+def main(cfg: MinAtarRNNConfig):
     key = jax.random.key(cfg.seed)
 
     # Init objects

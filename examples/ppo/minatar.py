@@ -15,6 +15,7 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
+from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
@@ -77,8 +78,8 @@ class MinAtarNetwork(PPONetwork):
         return action, PPONetworkOutput(policy_logits, value, None)
 
 
-def main():
-    cfg = MinAtarConfig()
+@add_cli
+def main(cfg: MinAtarConfig):
     key = jax.random.key(cfg.seed)
 
     # Init objects

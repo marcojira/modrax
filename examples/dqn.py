@@ -17,6 +17,7 @@ from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.transitions_rollout import transitions_rollout
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.utils import (
+    add_cli,
     compute_training_metrics,
     make_transition_minibatches,
     update_network_minibatches,
@@ -150,9 +151,8 @@ class DQNAlg(Alg):
         network.eps = 0.0
         return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=2000)
 
-
-def main():
-    cfg = Config()
+@add_cli
+def main(cfg: Config):
     key = jax.random.key(cfg.seed)
 
     env = GymnaxEnv(cfg.env_cfg)
