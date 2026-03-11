@@ -16,9 +16,10 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
+from modrax.utils import add_cli
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinAtarGTrXLNetworkConfig(Config):
     encoder_dim: int = 32
     policy_hidden_dims: tuple[int, ...] = (32, 32)
@@ -31,7 +32,7 @@ class MinAtarGTrXLNetworkConfig(Config):
     cached_train: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinAtarGTrXLConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinAtarGTrXLNetworkConfig = MinAtarGTrXLNetworkConfig()
@@ -108,8 +109,8 @@ class MinAtarGTrXLNetwork(PPONetwork):
         return self.gtrxl.carry.value
 
 
-def main():
-    cfg = MinAtarGTrXLConfig()
+@add_cli
+def main(cfg: MinAtarGTrXLConfig):
     key = jax.random.key(cfg.seed)
 
     # Init objects

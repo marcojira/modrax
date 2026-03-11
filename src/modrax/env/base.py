@@ -11,7 +11,7 @@ from jaxtyping import Array, Bool, Float, Int, Key
 from modrax.types import Config, Shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnvConfig(Config):
     env_name: str = ""
     auto_reset: bool = True
@@ -56,7 +56,7 @@ class Env:
     def __init__(self, config: EnvConfig):
         if config.optimistic_reset and not config.auto_reset:
             print("Optimistic resets require auto_reset=True. Proceeding with auto_resets")
-            config.auto_reset = True
+            config = dataclasses.replace(config, auto_reset = True)
 
         self.config = config
 

@@ -1,5 +1,6 @@
 """Train PQN with GTrXL on Craftax."""
 
+import dataclasses
 from dataclasses import dataclass
 
 import jax
@@ -18,7 +19,7 @@ from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxGTrXLNetworkConfig(Config):
     hidden_size: int = 512
     num_layers: int = 1
@@ -34,7 +35,7 @@ class CraftaxGTrXLNetworkConfig(Config):
     rollout_memory_len: int = 128
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxGTrXLPQNConfig(TrainConfig):
     env_cfg: CraftaxConfig = CraftaxConfig(
         env_name="Craftax-Symbolic-v1",
@@ -218,8 +219,14 @@ if __name__ == "__main__":
 
     def fn(num_transformer_layers, hidden_size, **kwargs):
         cfg = CraftaxGTrXLPQNConfig()
-        cfg.network_cfg.num_transformer_layers = num_transformer_layers
-        cfg.network_cfg.hidden_size = hidden_size
+        # cfg.network_cfg.num_transformer_layers = num_transformer_layers
+        # cfg.network_cfg.hidden_size = hidden_size
+        cfg = dataclasses.replace(
+            cfg,
+            network_cfg=dataclasses.replace(
+                cfg.network_cfg, num_transformer_layers=num_transformer_layers, hidden_size=hidden_size
+            ),
+        )
         main(cfg)
 
     project.run_exp(

@@ -16,7 +16,7 @@ from modrax.types import Config
 from modrax.utils import ema_update, finite_mean
 
 
-@dataclass
+@dataclass(frozen=True)
 class SACConfig(Config):
     init_buffer_size: int = int(5e3)
     buffer_size: int = int(1e6)
@@ -35,7 +35,7 @@ class SACConfig(Config):
 """ NETWORK """
 
 
-@dataclass
+@dataclass(frozen=True)
 class SACNetworkConfig(Config):
     running_norm: bool = True
     min_std: float = 0.001
@@ -72,7 +72,7 @@ class SACNetwork(Network):
         raise NotImplementedError
 
 
-@dataclass
+@dataclass(frozen=True)
 class SACOptimizerConfig(OptimizerConfig):
     q_optimizer_cfg: OptimizerConfig = field(
         default_factory=lambda: OptimizerConfig(learning_rate=1e-3)

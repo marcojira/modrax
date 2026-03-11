@@ -15,9 +15,10 @@ from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
+from modrax.utils import add_cli
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinAtarNetworkConfig(Config):
     encoder_hidden_dims: tuple[int, ...] = (128,)
     encoder_dim: int = 64
@@ -25,7 +26,7 @@ class MinAtarNetworkConfig(Config):
     value_hidden_dims: tuple[int, ...] = (64, 64)
 
 
-@dataclass
+@dataclass(frozen=True)
 class MinAtarConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinAtarNetworkConfig = MinAtarNetworkConfig()
@@ -77,8 +78,8 @@ class MinAtarNetwork(PPONetwork):
         return action, PPONetworkOutput(policy_logits, value, None)
 
 
-def main():
-    cfg = MinAtarConfig()
+@add_cli
+def main(cfg: MinAtarConfig):
     key = jax.random.key(cfg.seed)
 
     # Init objects
