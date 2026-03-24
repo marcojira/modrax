@@ -5,6 +5,6 @@ from typing import TypeAlias
 Shape: TypeAlias = Sequence[int]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config:
     pass

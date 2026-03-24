@@ -11,7 +11,7 @@ from octax.environments import create_environment  # type: ignore
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class OctaxConfig(EnvConfig):
     """Configuration for Octax environments."""
 

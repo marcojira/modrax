@@ -21,7 +21,7 @@ from modrax.utils import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class PPOConfig(Config):
     name: str = "PPO"
 

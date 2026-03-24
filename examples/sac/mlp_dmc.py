@@ -1,6 +1,8 @@
 import math
 import os
 
+from modrax.utils import add_cli
+
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
 import jax
@@ -19,7 +21,8 @@ from modrax.alg.sac import (
     SACOptimizer,
     SACOptimizerConfig,
 )
-from modrax.env import Env, MuJoCoPlaygroundConfig
+from modrax.env import Env
+from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig
 from modrax.network.mlp import MLP
 from modrax.network.running_norm import RunningNorm
 from modrax.training import TrainConfig, train
@@ -87,17 +90,18 @@ class MuJoCoSACNetwork(SACNetwork):
         return self.actor.get_action(obs, key)
 
 
-def main():
-    env_config = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
+@add_cli
+def main(cfg: MuJoCoPlaygroundConfig):
+    env_config = cfg
     network_config = SACNetworkConfig(running_norm=True)
     optimizer_config = SACOptimizerConfig()
     alg_config = SACConfig(num_gen_steps=1000)
     train_config = TrainConfig(
         seed=0,
-        env_config=env_config,
-        network_config=network_config,
-        optimizer_config=optimizer_config,
-        alg_config=alg_config,
+        env_cfg=env_config,
+        network_cfg=network_config,
+        optimizer_cfg=optimizer_config,
+        alg_cfg=alg_config,
         total_steps=100_000_000,
         save_path=None,
     )

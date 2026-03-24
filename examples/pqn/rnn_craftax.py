@@ -1,6 +1,7 @@
 """Train recurrent PQN on Craftax."""
 
 from dataclasses import dataclass
+import dataclasses
 
 import jax
 import jax.numpy as jnp
@@ -18,7 +19,7 @@ from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Config, Shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxRNNNetworkConfig(Config):
     hidden_size: int = 512
     num_layers: int = 1
@@ -28,7 +29,7 @@ class CraftaxRNNNetworkConfig(Config):
     add_last_action: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxPQNConfig(TrainConfig):
     env_cfg: CraftaxConfig = CraftaxConfig(
         env_name="Craftax-Symbolic-v1",
@@ -201,8 +202,14 @@ if __name__ == "__main__":
 
     def fn(num_rnn_layers, hidden_size, **kwargs):
         cfg = CraftaxPQNConfig()
-        cfg.network_cfg.num_rnn_layers = num_rnn_layers
-        cfg.network_cfg.hidden_size = hidden_size
+        # cfg.network_cfg.num_rnn_layers = num_rnn_layers
+        # cfg.network_cfg.hidden_size = hidden_size
+        cfg = dataclasses.replace(
+            cfg,
+            network_cfg=dataclasses.replace(
+                cfg.network_cfg, num_rnn_layers=num_rnn_layers, hidden_size=hidden_size
+            ),
+        )
         main(cfg)
 
     project.run_exp(

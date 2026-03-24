@@ -14,7 +14,7 @@ from jaxtyping import Array, Float, Key
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class MuJoCoPlaygroundConfig(EnvConfig):
     env_name: Literal[
         # DM Control Suite

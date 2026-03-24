@@ -13,7 +13,7 @@ from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 from modrax.utils import fig_to_rgb_array
 
 
-@dataclass
+@dataclass(frozen=True)
 class GymnaxConfig(EnvConfig):
     env_name: Literal[
         # Classic Control

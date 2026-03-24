@@ -24,7 +24,7 @@ MINATAR_ENV_MAP = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class PGXConfig(EnvConfig):
     env_name: Literal[
         "2048",

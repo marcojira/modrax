@@ -1,19 +1,19 @@
 """Wrapper for Craftax and Craftax-Classic from https://github.com/MichaelTMatthews/Craftax"""
 
+import functools
 from dataclasses import dataclass
 from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from craftax.craftax.constants import Achievement
 from craftax.craftax_env import make_craftax_env_from_name
 from jaxtyping import Array, Key
 
 from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxConfig(EnvConfig):
     env_name: Literal[
         "Craftax-Symbolic-v1",
@@ -23,8 +23,18 @@ class CraftaxConfig(EnvConfig):
     ] = "Craftax-Symbolic-v1"
 
 
+@functools.cache
+def get_achievements():
+    # Lazy import since it loads textures (and initializes jax to do so).
+    # We want the import (and CLI, tests, etc) to be very quick.
+    from craftax.craftax.constants import Achievement
+
+    return Achievement
+
+
 class CraftaxEnv(Env):
     def __init__(self, config: CraftaxConfig):
+
         self._env = make_craftax_env_from_name(config.env_name, auto_reset=False)
         self._env_params = self._env.default_params
 
@@ -66,7 +76,7 @@ class CraftaxEnv(Env):
     @staticmethod
     def _achievements_info(craftax_state) -> dict:
         achievements = craftax_state.achievements * 100.0
-        return {a.name.lower(): achievements[a.value] for a in Achievement}
+        return {a.name.lower(): achievements[a.value] for a in get_achievements()}
 
     def _get_renderer(self):
         if "Classic" in self.config.env_name:

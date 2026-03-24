@@ -12,7 +12,7 @@ from modrax.env.base import StateWithMetrics
 from modrax.types import Config
 
 
-@dataclass
+@dataclass(frozen=True)
 class NetworkConfig(Config):
     pass
 

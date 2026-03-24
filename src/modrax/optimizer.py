@@ -9,7 +9,7 @@ from modrax.network.base import Network
 from modrax.types import Config
 
 
-@dataclass
+@dataclass(frozen=True)
 class OptimizerConfig(Config):
     optimizer_type: Literal["adam", "adamw", "radam", "sgd", "rmsprop", "muon"] = "adam"
     weight_decay: float = 1e-5
