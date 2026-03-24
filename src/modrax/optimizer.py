@@ -11,7 +11,8 @@ from modrax.types import Config
 
 @dataclass
 class OptimizerConfig(Config):
-    optimizer_type: Literal["adam", "radam", "sgd", "rmsprop", "muon"] = "adam"
+    optimizer_type: Literal["adam", "adamw", "radam", "sgd", "rmsprop", "muon"] = "adam"
+    weight_decay: float = 1e-5
     learning_rate: float = 3e-4
     lr_decay: bool = False
     gradient_clip: float | None = None
@@ -35,6 +36,8 @@ class Optimizer(nnx.Optimizer):
         # Create optax optimizer based on config
         if config.optimizer_type == "adam":
             optax_optimizer = optax.adam(lr)
+        elif config.optimizer_type == "adamw":
+            optax_optimizer = optax.adamw(lr, weight_decay=config.weight_decay)
         elif config.optimizer_type == "radam":
             optax_optimizer = optax.radam(lr)
         elif config.optimizer_type == "sgd":

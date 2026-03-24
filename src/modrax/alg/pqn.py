@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -38,6 +38,9 @@ class PQNConfig(Config):
     start_eps: float = 1.0
     end_eps: float = 0.05
     eps_decay: float = 0.1
+
+    operator_fn: Callable = lambda q, cfg: jnp.max(q, axis=-1)
+    omega: float = 0.5
 
 
 """ NETWORK """
@@ -89,12 +92,12 @@ def compute_targets(
         delta = lambda_returns - next_q
         lambda_returns = target_bootstrap + config.gamma * config.lambd * delta
         lambda_returns = (1 - done) * lambda_returns + done * reward
-        next_q = jnp.max(q_val, axis=-1)
+        next_q = config.operator_fn(q_val, config)
         return (lambda_returns, next_q), lambda_returns
 
-    last_q = jnp.max(q_targets[:, -1], axis=-1)
+    last_q = config.operator_fn(q_targets[:, -1], config)
     lambda_return = rewards[:, -2] + config.gamma * (1 - dones[:, -2]) * last_q
-    prev_q = jnp.max(q_targets[:, -2], axis=-1)
+    prev_q = config.operator_fn(q_targets[:, -2], config)
 
     scan_fn = nnx.scan(
         backwards_step, in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1), reverse=True

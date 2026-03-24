@@ -208,7 +208,7 @@ if __name__ == "__main__":
     project.run_exp(
         "pqn/rnn_craftax",
         fn,
-        {"num_rnn_layers": [1], "hidden_size": [256, 512]},
+        {"num_rnn_layers": [1], "hidden_size": [512]},
         slurm_cfg,
         extra_commands=[
             "source /home/mila/m/marco.jiralerspong/projects/modrax/.venv/bin/activate"
