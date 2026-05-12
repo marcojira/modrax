@@ -57,7 +57,7 @@ class Optimizer(nnx.Optimizer):
             )
 
         # Initialize parent nnx.Optimizer
-        super().__init__(network, optax_optimizer)
+        super().__init__(network, optax_optimizer, wrt=nnx.Param)
         self.config = config
 
         # Warmup update to initialize the optimizer state and prevent recompilation.
@@ -66,4 +66,4 @@ class Optimizer(nnx.Optimizer):
             return jnp.array(0.0), {}
 
         _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
-        self.update(grads)
+        self.update(network, grads)

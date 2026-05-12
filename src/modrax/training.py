@@ -31,6 +31,7 @@ class WandbConfig:
     project: str = ""
     entity: str | None = None
     run_name: str | None = None
+    group: str | None = None
     tags: tuple[str] | None = None
 
 
@@ -80,7 +81,8 @@ def log_trajectories(
             path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
             iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
         if config.save_gif_wandb and config.wandb.enabled:
-            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="mp4")
+            format = "gif" if "minatar" in config.env_cfg.env_name.lower() else "mp4"
+            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="format")
             wandb.log({f"eval_trajectories/traj_{i}": video})
 
 
@@ -113,6 +115,7 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
             project=cfg.wandb.project,
             entity=cfg.wandb.entity,
             name=cfg.wandb.run_name,
+            group=cfg.wandb.group,
             tags=cfg.wandb.tags,
             config=flatten_cfg(cfg),
         )

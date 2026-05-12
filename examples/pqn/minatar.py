@@ -25,7 +25,7 @@ class MinatarConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
     optimizer_cfg: OptimizerConfig = OptimizerConfig(
-        optimizer_type="radam", learning_rate=5e-4, lr_decay=True, gradient_clip=10
+        optimizer_type="adamw", learning_rate=5e-4, lr_decay=True, gradient_clip=10
     )
     alg_cfg: PQNConfig = PQNConfig()
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
@@ -80,7 +80,7 @@ class MinatarNetwork(PQNNetwork):
         if self.input_norm is not None:
             x = self.input_norm(x, use_running_average=not train)
         else:
-            x = x / 255.0
+            x = x
 
         x = jax.nn.relu(self._apply_norm(self.conv(x), self.norm1, train))
         x = x.reshape(x.shape[0], -1)

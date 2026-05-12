@@ -151,6 +151,7 @@ class DQNAlg(Alg):
         network.eps = 0.0
         return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=2000)
 
+
 @add_cli
 def main(cfg: Config):
     key = jax.random.key(cfg.seed)

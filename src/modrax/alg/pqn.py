@@ -173,12 +173,13 @@ class PQNAlg(Alg):
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PQNState(nnx.split((self.network, self.optimizer)), env_state, 0)
         self.loop = nnx.jit(self._loop)
+
     def _loop(self, state: PQNState, key):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
         # Update epsilon
-        network.eps = self.eps_scheduler(state.step)
+        network.eps = nnx.data(self.eps_scheduler(state.step))
 
         # Generate data
         init_carry = network.get_carry()
