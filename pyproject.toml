@@ -30,7 +30,7 @@ dependencies = [
     "craftax",
     "gymnax",
     "jumanji",
-    # "octax", Needs to be installed from source
+    "octax",
     "pgx",
     "playground",
     "simple-parsing>=0.1.8",

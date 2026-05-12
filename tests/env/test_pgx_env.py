@@ -16,5 +16,5 @@ TEST_ENVS = [
 def test_pgx_env(env_name):
     """Test PGX environment initialization, reset, and step."""
     config = PGXConfig(env_name=env_name)
-    env = PGXEnv(config, jit=False)
+    env = PGXEnv(config)
     run_env_test(env, num_envs=4, num_steps=8)

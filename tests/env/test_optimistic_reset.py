@@ -12,5 +12,5 @@ def test_pgx_optimistic_reset():
         optimistic_reset=True,
         num_reset_envs=4,
     )
-    env = PGXEnv(config, jit=False)
+    env = PGXEnv(config)
     run_env_test(env, num_envs=8, num_steps=16, test_render=False)

@@ -26,7 +26,10 @@ def some_fn(cfg: SomeConfig):
     ],
 )
 def test_add_cli(
-    command_line_args: str, input: SomeConfig | None, expected: SomeConfig, monkeypatch: pytest.MonkeyPatch
+    command_line_args: str,
+    input: SomeConfig | None,
+    expected: SomeConfig,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(sys, "argv", ["some_fn"] + shlex.split(command_line_args))
 

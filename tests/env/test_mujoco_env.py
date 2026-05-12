@@ -15,5 +15,5 @@ TEST_ENVS = [
 def test_mujoco_env(env_name):
     """Test MuJoCo environment initialization, reset, and step."""
     config = MuJoCoPlaygroundConfig(env_name=env_name)
-    env = MuJoCoPlaygroundEnv(config, jit=False)
+    env = MuJoCoPlaygroundEnv(config)
     run_env_test(env, test_render=False)

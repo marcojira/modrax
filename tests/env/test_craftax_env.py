@@ -15,5 +15,5 @@ TEST_ENVS = [
 def test_craftax_env(env_name):
     """Test Craftax environment initialization, reset, and step."""
     config = CraftaxConfig(env_name=env_name)
-    env = CraftaxEnv(config, jit=False)
+    env = CraftaxEnv(config)
     run_env_test(env)

@@ -82,7 +82,8 @@ class MuJoCoPlaygroundEnv(Env):
         from mujoco_playground import registry
 
         self.env_cfg = registry.get_default_config(config.env_name)
-        self._env = registry.load(config.env_name)
+        # warp-lang 1.13.0 removed warp.types.warp_type_to_np_dtype, breaking the warp mjx backend
+        self._env = registry.load(config.env_name, config_overrides={"impl": "jax"})
 
         self.obs_shape = (self._env.observation_size,)
         self.action_size = self._env.action_size

@@ -17,5 +17,5 @@ TEST_ENVS = [
 def test_gymnax_env(env_name):
     """Test Gymnax environment initialization, reset, and step."""
     config = GymnaxConfig(env_name=env_name)
-    env = GymnaxEnv(config, jit=False)
+    env = GymnaxEnv(config)
     run_env_test(env)
