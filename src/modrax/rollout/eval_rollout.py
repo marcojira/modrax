@@ -13,7 +13,7 @@ def eval_rollout(
     network: Network,
     num_envs: int,
     key: Key[Array, ""],
-    max_steps: int = 1000,
+    max_steps: int = 2500,
     num_trajectories: int = 10,
 ) -> tuple[dict[str, Float[Array, ""]], StateWithMetrics]:
     """Run evaluation episodes and return mean metrics + trajectories.

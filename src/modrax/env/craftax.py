@@ -7,7 +7,6 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-from craftax.craftax.constants import CLOSE_BLOCKS, DIRECTIONS, BlockType, ItemType
 from craftax.craftax_env import make_craftax_env_from_name
 from jaxtyping import Array, Key
 
@@ -37,6 +36,9 @@ def get_achievements():
 
 
 def compute_action_mask(state):
+    # Lazy import since it loads textures (and initializes jax to do so).
+    from craftax.craftax.constants import BlockType, ItemType
+
     inv = state.inventory
     level_map = state.map[state.player_level]
 
@@ -167,6 +169,8 @@ def compute_action_mask(state):
 
 
 def _get_facing_block(state, level_map):
+    from craftax.craftax.constants import DIRECTIONS
+
     direction = DIRECTIONS[state.player_direction]
     target = state.player_position + direction
     map_h, map_w = level_map.shape
@@ -175,6 +179,8 @@ def _get_facing_block(state, level_map):
 
 
 def _check_nearby_blocks(state, level_map):
+    from craftax.craftax.constants import CLOSE_BLOCKS, BlockType
+
     positions = state.player_position + CLOSE_BLOCKS  # (8, 2)
     map_h, map_w = level_map.shape
     in_bounds = (

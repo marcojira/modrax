@@ -27,11 +27,13 @@ class NnxRNN(nnx.Module):
         self.activation_fn = activation_fn
         self.optimized_lstm = optimized_lstm
         self.residual = residual
+        self.rngs = rngs
 
         # TODO: VMAP this
-        self.cells = [self._create_cell(input_dim, output_dim, rngs)] + [
-            self._create_cell(output_dim, output_dim, rngs) for _ in range(num_layers - 1)
-        ]
+        self.cells = nnx.List(
+            [self._create_cell(input_dim, output_dim, rngs)]
+            + [self._create_cell(output_dim, output_dim, rngs) for _ in range(num_layers - 1)]
+        )
 
     def _create_cell(self, in_features: int, output_dim: int, rngs: nnx.Rngs):
         if self.cell_type == "lstm":
@@ -64,7 +66,10 @@ class NnxRNN(nnx.Module):
 
     def initialize_carry(self, batch_size: int):
         self.carry = nnx.Variable(
-            [cell.initialize_carry((batch_size, cell.in_features)) for cell in self.cells]
+            [
+                cell.initialize_carry((batch_size, cell.in_features), rngs=self.rngs)
+                for cell in self.cells
+            ]
         )
 
     def _reset_carry(self, carry, done):

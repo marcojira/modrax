@@ -82,7 +82,7 @@ def log_trajectories(
             iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
         if config.save_gif_wandb and config.wandb.enabled:
             format = "gif" if "minatar" in config.env_cfg.env_name.lower() else "mp4"
-            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="format")
+            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format=format)
             wandb.log({f"eval_trajectories/traj_{i}": video})
 
 
