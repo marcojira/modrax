@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 repo_root = Path(__file__).parent.parent.parent
-examples = list(str(example.relative_to(repo_root)) for example in (repo_root / "examples").rglob("*.py"))
+examples = list(
+    str(example.relative_to(repo_root)) for example in (repo_root / "examples").rglob("*.py")
+)
 
 
 @pytest.mark.parametrize(
