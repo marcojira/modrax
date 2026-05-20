@@ -130,8 +130,8 @@ def pqn_recurrent_loss(network: PQNNetwork, minibatch, config: PQNConfig):
         traj.obs, traj.dones, minibatch["init_carry"], traj.network_output.carry
     )
     target_q_values = jax.lax.stop_gradient(q_values)
+    target_q_values = jnp.where(traj.action_masks, target_q_values, -jnp.inf)
 
-    # Compute targets
     targets = compute_targets(traj.rewards, traj.dones, target_q_values, config)
 
     chosen_q_values = jnp.take_along_axis(q_values, traj.actions[..., None], axis=-1)
@@ -208,8 +208,14 @@ class PQNAlg(Alg):
                     trajectory.obs.reshape(-1, *trajectory.obs.shape[2:])
                 )
                 q_targets = q_targets.reshape(trajectory.obs.shape[0], trajectory.obs.shape[1], -1)
+                q_targets = jnp.where(trajectory.action_masks, q_targets, -jnp.inf)
 
-                targets = compute_targets(trajectory.rewards, trajectory.dones, q_targets, self.cfg)
+                targets = compute_targets(
+                    trajectory.rewards,
+                    trajectory.dones,
+                    q_targets,
+                    self.cfg,
+                )
                 all_data = {
                     "trajectory": jax.tree.map(lambda x: x[:, :-1], trajectory),
                     "targets": targets,

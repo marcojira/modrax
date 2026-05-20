@@ -27,7 +27,7 @@ from modrax.utils import format_metrics, pprint, render_trajectories, save_metri
 
 @dataclass(frozen=True)
 class WandbConfig:
-    enabled: bool = False
+    enabled: bool = True
     project: str = ""
     entity: str | None = None
     run_name: str | None = None

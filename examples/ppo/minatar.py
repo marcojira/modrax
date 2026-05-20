@@ -7,7 +7,7 @@ import jax
 from flax import nnx
 from jaxtyping import Array, Float, Key
 
-from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
+from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput, compute_total_updates
 from modrax.env.base import StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 from modrax.network.mlp import MLP

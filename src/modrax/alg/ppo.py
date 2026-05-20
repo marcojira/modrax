@@ -3,7 +3,6 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-import optax
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 

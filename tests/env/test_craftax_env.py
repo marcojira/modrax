@@ -6,8 +6,8 @@ from helpers import run_env_test
 from modrax.env.craftax import CraftaxConfig, CraftaxEnv
 
 TEST_ENVS = [
-    # "Craftax-Symbolic-v1",
-    "Craftax-Classic-Symbolic-v1",
+    "Craftax-Symbolic-v1",
+    # "Craftax-Classic-Symbolic-v1",
 ]
 
 

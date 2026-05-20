@@ -21,6 +21,7 @@ class CraftaxConfig(EnvConfig):
         "Craftax-Classic-Symbolic-v1",
         "Craftax-Classic-Pixels-v1",
     ] = "Craftax-Symbolic-v1"
+    use_action_mask: bool = True
 
 
 @functools.cache
@@ -240,7 +241,7 @@ class CraftaxEnv(Env):
         return step_output, new_state
 
     def _compute_action_mask(self, craftax_state):
-        if self.is_classic:
+        if self.is_classic or not self.config.use_action_mask:
             return jnp.ones(self.action_size, dtype=jnp.bool_)
         return compute_action_mask(craftax_state)
 
