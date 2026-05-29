@@ -3,7 +3,7 @@ from typing import Any, Callable
 import jax
 import jax.numpy as jnp
 from flax import nnx, struct
-from jaxtyping import Array, Float, Key
+from jaxtyping import Array, Bool, Float, Key
 
 from modrax.env import StateWithMetrics
 from modrax.network.base import Network
@@ -11,7 +11,9 @@ from modrax.network.base import Network
 
 @struct.dataclass
 class Trajectory:
-    """A sequence of experience collected over T steps from B parallel envs. Returned in (B, T, ...) order."""
+    """A sequence of experience collected over T steps from B parallel envs.
+    Returned in (B, T, ...) order.
+    """
 
     obs: Float[Array, "T B ..."]
     info: Any
@@ -20,6 +22,7 @@ class Trajectory:
     action_masks: Float[Array, "T B A"]
     network_output: Any
     dones: Float[Array, "T B"]
+    valid_mask: Bool[Array, "T B"] # Marks steps taken before per-env termination in episodic mode (always True otherwise)
     episode_returns: Float[Array, "T B"]
     episode_lengths: Float[Array, "T B"]
 
@@ -31,6 +34,7 @@ def trajectory_rollout(
     num_steps: int,
     key: Key[Array, ""],
     random_action=False,
+    episodic=False,
 ) -> tuple[StateWithMetrics, Trajectory]:
     """Collect num_steps of experience from B parallel envs for on-policy training.
 
@@ -44,6 +48,10 @@ def trajectory_rollout(
         num_steps: Number of environment steps to collect.
         key: Single PRNG key.
         random_action: If True, sample uniformly from valid actions (ignoring the network policy).
+        episodic: If True, `valid_mask` is False for any step taken after a per-env
+            terminal transition. Intended for use with envs configured with
+            auto_reset=False so episodes actually end. If False, `valid_mask` is
+            all True.
 
     Returns:
         final_env_state: Env state after the last step.
@@ -51,7 +59,7 @@ def trajectory_rollout(
     """
 
     def step(carry, step_key):
-        network, env_state = carry
+        network, env_state, alive = carry
         obs = env_state.obs
         action_mask = env_state.action_mask
 
@@ -68,6 +76,11 @@ def trajectory_rollout(
         step_output, new_env_state = step_fn(env_state, action, env_keys)
         network.reset(step_output.done)  # Reset network state based on environments that terminated
 
+        valid_mask = alive if episodic else jnp.ones_like(alive)
+        # In episodic mode envs stay in their terminal state, so step_output.done can
+        # stay True for many steps. Only count the transition (first done) as terminal.
+        dones = step_output.done & alive if episodic else step_output.done
+
         trajectory = Trajectory(
             obs=obs,
             info=env_state.info,
@@ -75,18 +88,29 @@ def trajectory_rollout(
             rewards=step_output.reward,
             action_masks=action_mask,
             network_output=out,
-            dones=step_output.done,
+            dones=dones,
+            valid_mask=valid_mask,
             episode_returns=env_state.episode_return + step_output.reward,
             episode_lengths=env_state.episode_length + 1,
         )
 
-        return (network, new_env_state), trajectory
+        new_alive = alive & ~step_output.done
+        return (network, new_env_state, new_alive), trajectory
 
     step_keys = jax.random.split(key, num_steps)
-    (_, final_env_state), trajectory = nnx.scan(step)((network, env_state), step_keys)
+    init_alive = jnp.ones(env_state.obs.shape[0], dtype=jnp.bool_)
+    (_, final_env_state, final_alive), trajectory = nnx.scan(step)(
+        (network, env_state, init_alive), step_keys
+    )
 
     trajectory = jax.tree_util.tree_map(
         lambda x: jnp.swapaxes(x, 0, 1), trajectory
     )  # Transpose to (B, T, ...)
+
+    if episodic:
+        # Truncate ongoing episodes by marking the last step as done for any env
+        # still alive at the end of the rollout.
+        new_dones = trajectory.dones.at[:, -1].set(trajectory.dones[:, -1] | final_alive)
+        trajectory = trajectory.replace(dones=new_dones)
 
     return final_env_state, trajectory
