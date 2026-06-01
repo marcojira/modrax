@@ -62,7 +62,7 @@ class GymnaxEnv(Env):
 
         return State(
             env_state=gymnax_state,
-            obs=obs.astype(jnp.int8),
+            obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 
@@ -76,7 +76,7 @@ class GymnaxEnv(Env):
         step_output = StepOutput(reward=reward, done=done, truncation=jnp.bool_(False), info=info)
         new_state = State(
             env_state=gymnax_state,
-            obs=obs.astype(jnp.int8),
+            obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 

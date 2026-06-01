@@ -4,7 +4,5 @@ from modrax.network.rnn import NnxRNN
 __all__ = [
     "Network",
     "NetworkConfig",
-    "CNN",
-    "MLP",
     "NnxRNN",
 ]
