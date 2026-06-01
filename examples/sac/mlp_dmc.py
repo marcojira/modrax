@@ -1,6 +1,7 @@
 import math
 import os
 
+from modrax.env.base import StateWithMetrics
 from modrax.utils import add_cli
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
@@ -21,11 +22,10 @@ from modrax.alg.sac import (
     SACOptimizer,
     SACOptimizerConfig,
 )
-from modrax.env import Env
-from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig
+from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
 from modrax.network.mlp import MLP
 from modrax.network.running_norm import RunningNorm
-from modrax.training import TrainConfig, train
+from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Shape
 
 
@@ -85,35 +85,35 @@ class MuJoCoSACNetwork(SACNetwork):
 
         self.running_norm = RunningNorm(obs_shape) if cfg.running_norm else lambda x: x
 
-    def get_action(self, obs: Float[Array, "B D"], key: Key[Array, ""]):
-        obs = self.running_norm(obs)
+    def policy(self, env_state: StateWithMetrics, key):
+        obs = self.running_norm(env_state.obs)
         return self.actor.get_action(obs, key)
 
 
 @add_cli
 def main(cfg: MuJoCoPlaygroundConfig):
-    env_config = cfg
+    env_config = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
     network_config = SACNetworkConfig(running_norm=True)
     optimizer_config = SACOptimizerConfig()
-    alg_config = SACConfig(num_gen_steps=1000)
+    alg_config = SACConfig()
     train_config = TrainConfig(
         seed=0,
         env_cfg=env_config,
         network_cfg=network_config,
         optimizer_cfg=optimizer_config,
         alg_cfg=alg_config,
-        total_steps=100_000_000,
         save_path=None,
+        wandb=WandbConfig(enabled=True),
+        save_gif_wandb=True,
+        eval_interval=5,
     )
 
-    env = Env(env_config)
+    env = MuJoCoPlaygroundEnv(env_config)
     network = MuJoCoSACNetwork(
         env.obs_shape, env.action_size, network_config, nnx.Rngs(train_config.seed)
     )
     optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, optimizer_config)
-    alg = SACAlg(
-        env, network, optimizer, alg_config, jax.random.key(train_config.seed)
-    )
+    alg = SACAlg(env, network, optimizer, alg_config, jax.random.key(train_config.seed))
 
     trained_network = train(env, network, optimizer, alg, train_config)
     return trained_network

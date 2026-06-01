@@ -11,6 +11,7 @@ from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.transitions_rollout import Transition, transitions_rollout
 from modrax.types import Config
 from modrax.utils import ema_update, finite_mean
@@ -28,6 +29,8 @@ class SACConfig(Config):
     minibatch_size: int = 512
     grad_steps: int = 8
     iterations_per_epoch: int = 1024
+
+    total_steps: int = 10_000_000
 
     autotune: bool = True
 
@@ -68,7 +71,7 @@ class SACNetwork(Network):
     log_alpha: LogAlpha
     running_norm: Callable
 
-    def get_action(self, obs: Float[Array, "B D"], key: Key[Array, ""]) -> tuple:
+    def policy(self, obs: Float[Array, "B D"], key: Key[Array, ""]) -> tuple:
         raise NotImplementedError
 
 
@@ -135,7 +138,7 @@ def value_update(
     (loss, info), grads = nnx.value_and_grad(value_loss, has_aux=True)(
         network.critic, minibatch, key
     )
-    optimizer.critic.update(grads)
+    optimizer.critic.update(network.critic, grads)
     network.critic.eval()
 
     return loss, info
@@ -160,7 +163,7 @@ def policy_update(
     (loss, info), grads = nnx.value_and_grad(policy_loss, has_aux=True)(
         network.actor, minibatch, key
     )
-    optimizer.actor.update(grads)
+    optimizer.actor.update(network.actor, grads)
     network.actor.eval()
 
     return loss, info
@@ -184,7 +187,7 @@ def alpha_update(
     (loss, info), grads = nnx.value_and_grad(alpha_loss, has_aux=True)(
         network.log_alpha, minibatch, key
     )
-    optimizer.alpha.update(grads)
+    optimizer.alpha.update(network.log_alpha, grads)
 
     return loss, info
 
@@ -207,6 +210,7 @@ class SACAlg(Alg):
     ):
         self.env = env
         self.cfg = alg_cfg
+        self.total_steps = self.cfg.total_steps
 
         network.eval()
         self.target_entropy = -0.5 * env.action_size
@@ -286,3 +290,9 @@ class SACAlg(Alg):
         metrics = {k: finite_mean(v) for k, v in metrics.items()}
 
         return metrics
+
+    def eval(self, key):
+        network, _ = nnx.merge(*self.state.agent_state)
+        network = nnx.clone(network)
+
+        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=1000)
