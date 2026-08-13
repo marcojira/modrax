@@ -7,9 +7,18 @@ import gymnax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from gymnax.environments import spaces
 from jaxtyping import Array, Key
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import (
+    ContinuousActionSpec,
+    DiscreteActionSpec,
+    Env,
+    EnvConfig,
+    State,
+    StateWithMetrics,
+    StepOutput,
+)
 from modrax.utils import fig_to_rgb_array
 
 
@@ -53,7 +62,18 @@ class GymnaxEnv(Env):
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
+        action_space = self._env.action_space(self._env_params)
+        if isinstance(action_space, spaces.Discrete):
+            self.action_spec = DiscreteActionSpec(action_space.n)
+        elif isinstance(action_space, spaces.Box):
+            shape = tuple(action_space.shape)
+            self.action_spec = ContinuousActionSpec(
+                shape=shape,
+                low=jnp.broadcast_to(jnp.asarray(action_space.low, dtype=jnp.float32), shape),
+                high=jnp.broadcast_to(jnp.asarray(action_space.high, dtype=jnp.float32), shape),
+            )
+        else:
+            raise TypeError(f"Unsupported Gymnax action space: {type(action_space).__name__}")
 
         super().__init__(config)
 

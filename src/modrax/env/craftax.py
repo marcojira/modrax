@@ -10,7 +10,7 @@ import numpy as np
 from craftax.craftax_env import make_craftax_env_from_name
 from jaxtyping import Array, Key
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
 @dataclass(frozen=True)
@@ -207,7 +207,9 @@ class CraftaxEnv(Env):
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
+        self.action_spec = DiscreteActionSpec(
+            self._env.action_space(self._env_params).n  # type: ignore
+        )
 
         super().__init__(config)
 

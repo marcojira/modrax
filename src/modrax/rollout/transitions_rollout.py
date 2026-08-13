@@ -3,7 +3,7 @@ from typing import Any, Callable
 import jax
 import jax.numpy as jnp
 from flax import nnx, struct
-from jaxtyping import Array, Float, Key
+from jaxtyping import Array, Float, Key, Shaped
 
 from modrax.env import StateWithMetrics
 from modrax.network.base import Network
@@ -16,7 +16,7 @@ class Transition:
     obs: Float[Array, "B T ..."]
     next_obs: Float[Array, "B T ..."]
     info: Any
-    actions: Float[Array, "B T ..."]
+    actions: Shaped[Array, "B T ..."]
     rewards: Float[Array, "B T"]
     action_masks: Float[Array, "B T A"]
     network_output: Any

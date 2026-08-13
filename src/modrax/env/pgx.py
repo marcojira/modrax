@@ -13,7 +13,7 @@ from pgx.minatar.freeway import MinAtarFreeway
 from pgx.minatar.seaquest import MinAtarSeaquest
 from pgx.minatar.space_invaders import MinAtarSpaceInvaders
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 MINATAR_ENV_MAP = {
     "minatar-asterix": MinAtarAsterix,
@@ -61,7 +61,7 @@ class PGXEnv(Env):
             self._env = make(config.env_name)
 
         self.obs_shape = self._env.observation_shape
-        self.action_size = self._env.num_actions
+        self.action_spec = DiscreteActionSpec(self._env.num_actions)
 
         super().__init__(config)
 

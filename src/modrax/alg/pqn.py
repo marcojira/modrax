@@ -8,7 +8,7 @@ from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
 from modrax.alg.base import Alg
-from modrax.env.base import Env, StateWithMetrics
+from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
 from modrax.rollout.eval_rollout import eval_rollout
@@ -160,6 +160,9 @@ class PQNAlg(Alg):
         cfg: PQNConfig,
         key: Key[Array, ""],
     ):
+        if not isinstance(env.action_spec, DiscreteActionSpec):
+            raise ValueError("PQN requires a discrete action space")
+
         super().__init__(env, network, optimizer, cfg, key)
         self.total_steps = cfg.total_steps
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps

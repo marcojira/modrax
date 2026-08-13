@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -8,7 +9,7 @@ from jaxtyping import Array, Float, Key
 
 from modrax.alg.base import Alg
 from modrax.buffer import BufferState, ReplayBuffer
-from modrax.env.base import Env, StateWithMetrics
+from modrax.env.base import ContinuousActionSpec, Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.rollout.eval_rollout import eval_rollout
@@ -71,7 +72,7 @@ class SACNetwork(Network):
     log_alpha: LogAlpha
     running_norm: Callable
 
-    def policy(self, obs: Float[Array, "B D"], key: Key[Array, ""]) -> tuple:
+    def policy(self, env_state: StateWithMetrics, key: Key[Array, ""]) -> tuple:
         raise NotImplementedError
 
 
@@ -208,11 +209,14 @@ class SACAlg(Alg):
         alg_cfg: SACConfig,
         key: Key[Array, ""],
     ):
+        if not isinstance(env.action_spec, ContinuousActionSpec):
+            raise ValueError("SAC requires a continuous action space")
+
         super().__init__(env, network, optimizer, alg_cfg, key)
         self.total_steps = self.cfg.total_steps
 
         network.eval()
-        self.target_entropy = -0.5 * env.action_size
+        self.target_entropy = -0.5 * math.prod(env.action_spec.shape)
 
         # Generate transitions for initial buffer
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))

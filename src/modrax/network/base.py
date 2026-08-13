@@ -6,7 +6,7 @@ from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
-from jaxtyping import Array, Float, Int, Key
+from jaxtyping import Array, Float, Key, Shaped
 
 from modrax.env.base import StateWithMetrics
 from modrax.types import Config
@@ -22,7 +22,7 @@ class Network(nnx.Module):
 
     def policy(
         self, env_state: StateWithMetrics, key: Key[Array, ""]
-    ) -> tuple[Int[Array, " B"], Any]:
+    ) -> tuple[Shaped[Array, "B ..."], Any]:
         """Select actions given the current env state. Returns (actions, network_output)
         where network_output contains algorithm-specific data stored during rollout collection."""
         raise NotImplementedError

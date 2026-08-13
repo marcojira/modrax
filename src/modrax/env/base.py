@@ -1,4 +1,5 @@
 import dataclasses
+import math
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -6,9 +7,24 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from flax import nnx
-from jaxtyping import Array, Bool, Float, Int, Key
+from jaxtyping import Array, Bool, Float, Int, Key, Shaped
 
 from modrax.types import Config, Shape
+
+
+@dataclass(frozen=True)
+class DiscreteActionSpec:
+    num_actions: int
+
+
+@dataclass(frozen=True)
+class ContinuousActionSpec:
+    shape: tuple[int, ...]
+    low: Float[Array, "..."]
+    high: Float[Array, "..."]
+
+
+ActionSpec = DiscreteActionSpec | ContinuousActionSpec
 
 
 @dataclass(frozen=True)
@@ -50,15 +66,22 @@ class StepOutput(NamedTuple):
 
 class Env:
     obs_shape: Shape
-    action_size: int
+    action_spec: ActionSpec
     config: EnvConfig
 
     def __init__(self, config: EnvConfig):
         if config.optimistic_reset and not config.auto_reset:
             print("Optimistic resets require auto_reset=True. Proceeding with auto_resets")
-            config = dataclasses.replace(config, auto_reset = True)
+            config = dataclasses.replace(config, auto_reset=True)
 
         self.config = config
+
+    @property
+    def action_size(self) -> int:
+        """Return the discrete action count or continuous action dimension."""
+        if isinstance(self.action_spec, DiscreteActionSpec):
+            return self.action_spec.num_actions
+        return math.prod(self.action_spec.shape)
 
     @nnx.jit(static_argnames=["self"])
     def reset(self, keys: Key[Array, " B"]) -> StateWithMetrics:
@@ -76,7 +99,7 @@ class Env:
     def step(
         self,
         state: StateWithMetrics,
-        action: Float[Array, "B ..."],
+        action: Shaped[Array, "B ..."],
         keys: Key[Array, " B"],
     ) -> tuple[StepOutput, StateWithMetrics]:
         """Step B environments in parallel.
@@ -115,9 +138,17 @@ class Env:
         ]
         return np.stack(frames)
 
-    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Int[Array, " B"]:
+    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Shaped[Array, "B ..."]:
         """Sample random actions for num_envs environments."""
-        return jax.random.randint(key, (num_envs,), 0, self.action_size)
+        if isinstance(self.action_spec, DiscreteActionSpec):
+            return jax.random.randint(key, (num_envs,), 0, self.action_spec.num_actions)
+
+        return jax.random.uniform(
+            key,
+            (num_envs, *self.action_spec.shape),
+            minval=self.action_spec.low,
+            maxval=self.action_spec.high,
+        )
 
     def _reset_single(self, key: Key[Array, ""]) -> StateWithMetrics:
         """Reset a single environment and wrap with metrics."""
@@ -135,7 +166,7 @@ class Env:
         self,
         state: StateWithMetrics,
         reset_state: StateWithMetrics,
-        action: Float[Array, "..."],
+        action: Shaped[Array, "..."],
         key: Key[Array, ""],
     ) -> tuple[StepOutput, StateWithMetrics]:
         """Step a single environment with auto-reset and metric tracking."""
@@ -178,7 +209,7 @@ class Env:
         raise NotImplementedError("Subclasses must implement _inner_reset_fn")
 
     def _inner_step_fn(
-        self, state: State, action: Float[Array, "..."], key: Key[Array, ""]
+        self, state: State, action: Shaped[Array, "..."], key: Key[Array, ""]
     ) -> tuple[StepOutput, State]:
         """Step a single environment. Subclasses must override this."""
         raise NotImplementedError("Subclasses must implement _inner_step_fn")

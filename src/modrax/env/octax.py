@@ -8,7 +8,7 @@ import numpy as np
 from jaxtyping import Array, Key
 from octax.environments import create_environment  # type: ignore
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class OctaxEnv(Env):
         dummy_key = jax.random.key(0)
         _, dummy_obs, _ = self._env.reset(dummy_key)
         self.obs_shape = self._transpose_obs(dummy_obs).shape
-        self.action_size = self._env.num_actions
+        self.action_spec = DiscreteActionSpec(self._env.num_actions)
 
         super().__init__(config)
 

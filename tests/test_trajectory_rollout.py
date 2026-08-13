@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from modrax.env import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 from modrax.network import Network
 from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import trajectory_rollout
@@ -17,7 +17,7 @@ class _Policy(Network):
 class _Env(Env):
     def __init__(self):
         self.obs_shape = (1,)
-        self.action_size = 5
+        self.action_spec = DiscreteActionSpec(5)
         super().__init__(EnvConfig())
 
     def _inner_reset_fn(self, key):
