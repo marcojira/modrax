@@ -1,8 +1,6 @@
 """Utility functions."""
 
-import json
 import typing
-from pathlib import Path
 from typing import Any, Callable
 
 import jax
@@ -118,20 +116,6 @@ def pprint(d: dict[str, Any], ndigits: int = 3) -> None:
 
     print(format_value(d))
     return
-
-
-def save_metrics_jsonl(metrics: dict[str, Any], save_path: str) -> None:
-    """Save metrics to a JSONL file.
-
-    Args:
-        metrics: Dictionary of metrics to save
-        save_path: Path to the JSONL file (will be created if it doesn't exist)
-    """
-    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-
-    # Append metrics as a single JSON line
-    with open(save_path, "a") as f:
-        f.write(json.dumps(metrics) + "\n")
 
 
 def make_trajectory_minibatches(data: PyTree, key: Key[Array, ""], minibatch_size: int):

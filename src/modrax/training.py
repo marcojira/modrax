@@ -1,14 +1,17 @@
 """Training utilities for RL algorithms."""
 
-import dataclasses
 import os
 import time
 from dataclasses import dataclass, field
 
-import imageio.v3 as iio
-import wandb
-
 from modrax.alg.base import Alg
+from modrax.logging import (
+    WandbConfig,
+    finish_logging,
+    init_logging,
+    log_metrics,
+    log_trajectories,
+)
 from modrax.optimizer import OptimizerConfig
 from modrax.types import Config
 
@@ -19,20 +22,9 @@ from flax import nnx
 from rich import print
 from tqdm import tqdm
 
-from modrax.env import Env, EnvConfig
-from modrax.env.base import StateWithMetrics
+from modrax.env import EnvConfig
 from modrax.network.base import Network
-from modrax.utils import format_metrics, pprint, render_trajectories, save_metrics_jsonl
-
-
-@dataclass(frozen=True)
-class WandbConfig:
-    enabled: bool = False
-    project: str = ""
-    entity: str | None = None
-    run_name: str | None = None
-    group: str | None = None
-    tags: tuple[str] | None = None
+from modrax.utils import format_metrics, pprint
 
 
 @dataclass(frozen=True)
@@ -54,51 +46,6 @@ class TrainConfig(Config):
     num_gif_trajectories: int = 5
 
 
-def log_metrics(metrics: dict, config: TrainConfig, filename: str):
-    """Log metrics to wandb and/or save to JSONL."""
-    if config.wandb.enabled:
-        wandb.log(metrics)
-    if config.save_path is not None:
-        save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
-
-
-def log_trajectories(
-    env: Env,
-    trajectories: StateWithMetrics,
-    config: TrainConfig,
-    epoch: int,
-    n_trajectories: int = 2,
-    fps: int = 10,
-):
-    """Render trajectories and log as GIFs to wandb and/or save to disk."""
-    if not (config.save_gif_local or config.save_gif_wandb):
-        return
-
-    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:n_trajectories], trajectories))
-
-    for i, frames in enumerate(rendered):
-        if config.save_gif_local and config.save_path is not None:
-            path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
-            iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
-        if config.save_gif_wandb and config.wandb.enabled:
-            format = "gif" if "minatar" in config.env_cfg.env_name.lower() else "mp4"
-            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format=format)
-            wandb.log({f"eval_trajectories/traj_{i}": video})
-
-
-def flatten_cfg(config: TrainConfig) -> dict:
-    """Flatten TrainConfig into a flat dict with prefixed keys for wandb."""
-    flat = {}
-    for f in dataclasses.fields(config):
-        value = getattr(config, f.name)
-        if dataclasses.is_dataclass(value):
-            for inner_f in dataclasses.fields(value):
-                flat[f"{f.name}.{inner_f.name}"] = getattr(value, inner_f.name)
-        else:
-            flat[f.name] = value
-    return flat
-
-
 def train(algorithm: Alg, config: TrainConfig) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
     key = jax.random.key(config.seed)
@@ -110,16 +57,7 @@ def train(algorithm: Alg, config: TrainConfig) -> Network:
     if config.display_network:
         nnx.display(algorithm.network)
 
-    # Wandb
-    if config.wandb.enabled:
-        wandb.init(
-            project=config.wandb.project,
-            entity=config.wandb.entity,
-            name=config.wandb.run_name,
-            group=config.wandb.group,
-            tags=config.wandb.tags,
-            config=flatten_cfg(config),
-        )
+    init_logging(config)
 
     # Training loop
     num_epochs = algorithm.total_steps // algorithm.env_steps_per_epoch
@@ -169,8 +107,7 @@ def train(algorithm: Alg, config: TrainConfig) -> Network:
         algorithm.network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
-    if config.wandb.enabled:
-        wandb.finish()
+    finish_logging(config)
 
     print("\nTraining completed!")
     return algorithm.network

@@ -1,0 +1,106 @@
+"""Experiment logging utilities."""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import imageio.v3 as iio
+import jax
+import wandb
+
+from modrax.env import Env
+from modrax.env.base import StateWithMetrics
+from modrax.utils import render_trajectories
+
+if TYPE_CHECKING:
+    from modrax.training import TrainConfig
+
+
+@dataclass(frozen=True)
+class WandbConfig:
+    enabled: bool = False
+    project: str = ""
+    entity: str | None = None
+    run_name: str | None = None
+    group: str | None = None
+    tags: tuple[str, ...] | None = None
+
+
+def flatten_config(config: TrainConfig) -> dict[str, Any]:
+    """Flatten a training config into prefixed keys for W&B."""
+    flat = {}
+    for config_field in dataclasses.fields(config):
+        value = getattr(config, config_field.name)
+        if dataclasses.is_dataclass(value):
+            for inner_field in dataclasses.fields(value):
+                flat[f"{config_field.name}.{inner_field.name}"] = getattr(
+                    value, inner_field.name
+                )
+        else:
+            flat[config_field.name] = value
+    return flat
+
+
+def init_logging(config: TrainConfig) -> None:
+    """Initialize enabled experiment loggers."""
+    if config.wandb.enabled:
+        wandb.init(
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            name=config.wandb.run_name,
+            group=config.wandb.group,
+            tags=config.wandb.tags,
+            config=flatten_config(config),
+        )
+
+
+def log_metrics(metrics: dict[str, Any], config: TrainConfig, filename: str) -> None:
+    """Log metrics to W&B and/or save them as JSONL."""
+    if config.wandb.enabled:
+        wandb.log(metrics)
+    if config.save_path is not None:
+        save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
+
+
+def save_metrics_jsonl(metrics: dict[str, Any], save_path: str) -> None:
+    """Append metrics to a JSONL file."""
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, "a") as file:
+        file.write(json.dumps(metrics) + "\n")
+
+
+def log_trajectories(
+    env: Env,
+    trajectories: StateWithMetrics,
+    config: TrainConfig,
+    epoch: int,
+    n_trajectories: int = 2,
+    fps: int = 10,
+) -> None:
+    """Render trajectories and log them to W&B and/or save them as GIFs."""
+    if not (config.save_gif_local or config.save_gif_wandb):
+        return
+
+    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:n_trajectories], trajectories))
+
+    for index, frames in enumerate(rendered):
+        if config.save_gif_local and config.save_path is not None:
+            path = os.path.join(config.save_path, f"trajectory_{epoch}_{index}.gif")
+            iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
+        if config.save_gif_wandb and config.wandb.enabled:
+            video_format = "gif" if "minatar" in config.env_cfg.env_name.lower() else "mp4"
+            video = wandb.Video(
+                frames.transpose(0, 3, 1, 2), fps=fps, format=video_format
+            )
+            wandb.log({f"eval_trajectories/traj_{index}": video})
+
+
+def finish_logging(config: TrainConfig) -> None:
+    """Finish enabled experiment loggers."""
+    if config.wandb.enabled:
+        wandb.finish()
