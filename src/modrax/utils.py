@@ -147,7 +147,7 @@ def update_network_minibatches(
         network, optimizer = nnx.merge(graphdef, state)
 
         (loss, info), grads = nnx.value_and_grad(loss_fn, has_aux=True)(network, minibatch, config)
-        optimizer.update(network, grads)
+        optimizer.update(grads)
 
         graph_state = nnx.split((network, optimizer))
         return graph_state, (loss, info)

@@ -101,8 +101,11 @@ class CraftaxRNNNetwork(PPONetwork):
         action = softmax_policy(policy_logits, env_state.action_mask, key)
         return action, PPONetworkOutput(policy_logits, value, carry)
 
-    def reset(self, done: Float[Array, " B"]):
-        self.rnn.reset(done)
+    def reset(self):
+        self.rnn.reset()
+
+    def reset_episodes(self, done: Array):
+        self.rnn.reset_episodes(done)
 
     def get_carry(self):
         return self.rnn.carry.value

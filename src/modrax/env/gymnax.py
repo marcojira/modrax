@@ -132,7 +132,7 @@ class GymnaxEnv(Env):
         cmap_colors = sns.color_palette("cubehelix", n_channels)
         color_table = (np.array([(0, 0, 0)] + list(cmap_colors)) * 255).astype(np.uint8)
 
-        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1)  # (B, H, W)
+        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1).astype(np.intp)
         return color_table[channel_idx]  # (B, H, W, 3)
 
     """ Using logic from https://github.com/RobertTLange/gymnax/blob/main/gymnax/visualize/"""

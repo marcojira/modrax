@@ -89,6 +89,11 @@ class MuJoCoSACNetwork(SACNetwork):
         obs = self.running_norm(env_state.obs)
         return self.actor.get_action(obs, key)
 
+    def eval_policy(self, env_state: StateWithMetrics, key):
+        obs = self.running_norm(env_state.obs)
+        mean, _ = self.actor(obs)
+        return jnp.tanh(mean), None
+
 
 @add_cli
 def main(cfg: MuJoCoPlaygroundConfig):

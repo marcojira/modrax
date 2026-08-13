@@ -9,7 +9,6 @@ from modrax.alg.base import Alg
 from modrax.env.base import Env, StateWithMetrics
 from modrax.network import Network
 from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.transitions_rollout import transitions_rollout
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.utils import (
@@ -74,6 +73,7 @@ class MyAlg(Alg):
     def __call__(self, key: jax.Array) -> dict[str, float]: ...
 
     def eval(self, key: jax.Array): ...
+
 
 @add_cli
 def main(cfg: Config):

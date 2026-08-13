@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import jax
+import jax.numpy as jnp
 from flax import nnx
 
 from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput, compute_total_updates
@@ -38,7 +39,7 @@ class MinatarNetwork(PQNNetwork):
     def __init__(self, obs_shape, action_size: int, cfg: MinatarNetworkConfig, rngs: nnx.Rngs):
         self.is_recurrent = False
         self.cfg = cfg
-        self.eps = 1.0
+        self.eps = nnx.Variable(jnp.array(1.0))
         h, w, in_channels = obs_shape
 
         self.conv = nnx.Conv(
@@ -90,6 +91,11 @@ class MinatarNetwork(PQNNetwork):
     def policy(self, env_state: StateWithMetrics, key):
         q_values = self.__call__(env_state.obs)
         action = epsilon_greedy_policy(q_values, env_state.action_mask, key, self.eps)
+        return action, PQNNetworkOutput(q_values, None)
+
+    def eval_policy(self, env_state: StateWithMetrics, key):
+        q_values = self.__call__(env_state.obs, train=False)
+        action = epsilon_greedy_policy(q_values, env_state.action_mask, key, 0.0)
         return action, PQNNetworkOutput(q_values, None)
 
     def train_forward(self, obs):

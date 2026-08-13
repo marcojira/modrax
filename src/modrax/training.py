@@ -23,6 +23,7 @@ from rich import print
 from tqdm import tqdm
 
 from modrax.env import EnvConfig
+from modrax.eval import evaluate
 from modrax.network.base import Network
 from modrax.utils import format_metrics, pprint
 
@@ -37,6 +38,7 @@ class TrainConfig(Config):
     seed: int
 
     eval_interval: int = 0
+    eval_max_steps: int = 1000
 
     wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False
@@ -86,7 +88,12 @@ def train(algorithm: Alg, config: TrainConfig) -> Network:
             epoch % config.eval_interval == 0 or epoch == num_epochs - 1
         ):
             eval_key, key = jax.random.split(key)
-            eval_metrics, trajectories = algorithm.eval(eval_key)
+            eval_metrics, trajectories = evaluate(
+                algorithm,
+                eval_key,
+                max_steps=config.eval_max_steps,
+                num_trajectories=config.num_gif_trajectories,
+            )
             eval_metrics["epoch"] = epoch
             eval_metrics["steps_M"] = total_steps / 1e6
             eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}

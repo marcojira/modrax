@@ -6,7 +6,7 @@ from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
-from jaxtyping import Array, Float, Key, Shaped
+from jaxtyping import Array, Key, Shaped
 
 from modrax.env.base import StateWithMetrics
 from modrax.types import Config
@@ -27,7 +27,22 @@ class Network(nnx.Module):
         where network_output contains algorithm-specific data stored during rollout collection."""
         raise NotImplementedError
 
-    def reset(self, done: Float[Array, " B"]):
+    def eval_policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Shaped[Array, "B ..."], Any]:
+        """Select actions for evaluation."""
+        return self.policy(env_state, key)
+
+    def eval(self, **attributes):
+        """Set evaluation mode and clear any stored recurrent state."""
+        super().eval(**attributes)
+        self.reset()
+        return self
+
+    def reset(self):
+        return
+
+    def reset_episodes(self, done: Array):
         return
 
     def get_carry(self):

@@ -79,7 +79,7 @@ class CraftaxGTrXLNetwork(PQNNetwork):
     ):
         self.is_recurrent = True
         self.cfg = cfg
-        self.eps = 1.0
+        self.eps = nnx.Variable(jnp.array(1.0))
         self.action_size = action_size
         obs_dim = 1
         for d in obs_shape:
@@ -186,8 +186,12 @@ class CraftaxGTrXLNetwork(PQNNetwork):
         out = self.gtrxl.train_forward(encoded, gtrxl_init_carry, gtrxl_saved_carry)
         return self.output(out)
 
-    def reset(self, done: Float[Array, " B"]):
-        self.gtrxl.reset(done)
+    def reset(self):
+        self.gtrxl.reset()
+        self.last_action.value = jnp.zeros_like(self.last_action.value)
+
+    def reset_episodes(self, done: Array):
+        self.gtrxl.reset_episodes(done)
         self.last_action.value = jnp.where(done, 0, self.last_action.value)
 
     def get_carry(self):

@@ -23,13 +23,14 @@ class _Alg:
     def __call__(self, key):
         return {"loss": 0.0}
 
-    def eval(self, key):
-        return {"return": 0.0}, self.trajectories
-
-
 def test_train_uses_algorithm_dependencies(monkeypatch):
     alg = _Alg()
     rendered = []
+    monkeypatch.setattr(
+        training,
+        "evaluate",
+        lambda algorithm, *args, **kwargs: ({"return": 0.0}, algorithm.trajectories),
+    )
     monkeypatch.setattr(
         training,
         "log_trajectories",
@@ -38,6 +39,7 @@ def test_train_uses_algorithm_dependencies(monkeypatch):
     cfg = SimpleNamespace(
         seed=0,
         eval_interval=1,
+        eval_max_steps=10,
         display_network=False,
         save_path=None,
         num_gif_trajectories=1,

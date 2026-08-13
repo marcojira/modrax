@@ -11,7 +11,6 @@ from modrax.alg.base import Alg
 from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
-from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import trajectory_rollout
 from modrax.types import Config
 from modrax.utils import (
@@ -55,6 +54,8 @@ class PQNNetworkOutput:
 class PQNNetwork(Network):
     """Abstract base class for PQN networks."""
 
+    eps: nnx.Variable
+
     def train_forward(
         self,
         obs: Float[Array, "B T ..."],
@@ -68,6 +69,13 @@ class PQNNetwork(Network):
         self, env_state: StateWithMetrics, key: Key[Array, ""]
     ) -> tuple[Int[Array, " B"], PQNNetworkOutput]:
         raise NotImplementedError
+
+    def eval_policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Int[Array, " B"], PQNNetworkOutput]:
+        """Select greedy actions for evaluation."""
+        self.eps[...] = 0.0
+        return self.policy(env_state, key)
 
 
 """ HELPERS """
@@ -182,7 +190,7 @@ class PQNAlg(Alg):
         network, optimizer = nnx.merge(*state.agent_state)
 
         # Update epsilon
-        network.eps = nnx.data(self.eps_scheduler(state.step))
+        network.eps[...] = self.eps_scheduler(state.step)
 
         # Generate data
         init_carry = network.get_carry()
@@ -241,13 +249,3 @@ class PQNAlg(Alg):
     def __call__(self, key):
         self.state, metrics = self.loop(self.state, key)
         return metrics
-
-    def eval(self, key):
-        network, _ = nnx.merge(*self.state.agent_state)
-        network = nnx.clone(network)
-        network.eps = 0.0
-
-        if network.is_recurrent:
-            network.reset(jnp.ones(self.cfg.num_envs))
-
-        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=1000)

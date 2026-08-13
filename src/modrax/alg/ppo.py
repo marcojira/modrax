@@ -10,7 +10,6 @@ from modrax.alg.base import Alg
 from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer
-from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
 from modrax.types import Config
 from modrax.utils import (
@@ -221,12 +220,3 @@ class PPOAlg(Alg):
     def __call__(self, key: Key[Array, ""]):
         self.state, metrics = self.loop(self.state, key)
         return metrics
-
-    def eval(self, key):
-        network, _ = nnx.merge(*self.state.agent_state)
-        network = nnx.clone(network)
-
-        if network.is_recurrent:
-            network.reset(jnp.ones(self.cfg.num_envs))
-
-        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=2000)

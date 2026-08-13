@@ -75,7 +75,10 @@ class NnxRNN(nnx.Module):
     def _reset_carry(self, carry, done):
         return jax.tree.map(lambda c: jnp.where(done[:, None], 0, c), carry)
 
-    def reset(self, done: Float[Array, " B"]):
+    def reset(self):
+        self.carry.value = jax.tree.map(jnp.zeros_like, self.carry.value)
+
+    def reset_episodes(self, done: Array):
         self.carry.value = self._reset_carry(self.carry.value, done)
 
     def _step(self, carry, x: Float[Array, "B D"]):

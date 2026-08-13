@@ -21,7 +21,7 @@ class Trajectory:
     rewards: Float[Array, "B T"]
     action_masks: Float[Array, "B T A"]
     network_output: Any
-    dones: Float[Array, "B T"]
+    dones: Bool[Array, "B T"]
     # Marks steps before per-environment termination in episodic mode.
     valid_mask: Bool[Array, "B T"]
     episode_returns: Float[Array, "B T"]
@@ -75,7 +75,7 @@ def trajectory_rollout(
         # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])
         step_output, new_env_state = step_fn(env_state, action, env_keys)
-        network.reset(step_output.done)  # Reset network state based on environments that terminated
+        network.reset_episodes(step_output.done)
 
         valid_mask = alive if episodic else jnp.ones_like(alive)
         # In episodic mode envs stay in their terminal state, so step_output.done can

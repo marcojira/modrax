@@ -66,7 +66,10 @@ class GatedTransformerXL(nnx.Module):
 
         self.carry = nnx.Variable(GTrXLRecurrentState(memory=memory, mask=mask))
 
-    def reset(self, done: Float[Array, " B"]):
+    def reset(self):
+        self.carry.value = jax.tree.map(jnp.zeros_like, self.carry.value)
+
+    def reset_episodes(self, done: Array):
         done = done[:, None, None, None]  # Add dimensions for broadcasting
 
         # Reset memory/mask for states that are done

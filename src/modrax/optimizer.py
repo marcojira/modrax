@@ -66,4 +66,4 @@ class Optimizer(nnx.Optimizer):
             return jnp.array(0.0), {}
 
         _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
-        self.update(network, grads)
+        self.update(grads)

@@ -1,9 +1,10 @@
 import jax
 import jax.numpy as jnp
+from flax import nnx
 
 from modrax.env import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.eval import eval_rollout
 from modrax.network import Network
-from modrax.rollout.eval_rollout import eval_rollout
 from modrax.rollout.trajectory_rollout import trajectory_rollout
 from modrax.rollout.transitions_rollout import transitions_rollout
 
@@ -12,6 +13,21 @@ class _Policy(Network):
     def policy(self, env_state, key):
         batch_size = env_state.obs.shape[0]
         return jnp.zeros(batch_size, dtype=jnp.int32), jnp.zeros(batch_size)
+
+
+class _EvalPolicy(_Policy):
+    def eval_policy(self, env_state, key):
+        batch_size = env_state.obs.shape[0]
+        return jnp.ones(batch_size, dtype=jnp.int32), jnp.zeros(batch_size)
+
+
+class _StatefulPolicy(_Policy):
+    def __init__(self):
+        self.dropout = nnx.Dropout(0.5)
+        self.state = nnx.Variable(jnp.ones(2))
+
+    def reset(self):
+        self.state[...] = 0
 
 
 class _Env(Env):
@@ -29,7 +45,7 @@ class _Env(Env):
         )
 
     def _inner_step_fn(self, state, action, key):
-        step = state.env_state + 1
+        step = state.env_state + action + 1
         output = StepOutput(
             reward=jnp.ones(()),
             done=jnp.bool_(False),
@@ -38,7 +54,7 @@ class _Env(Env):
         )
         new_state = State(
             env_state=step,
-            obs=jnp.full((1,), step),
+            obs=jnp.full((1,), step, dtype=jnp.float32),
             action_mask=state.action_mask,
             info={},
         )
@@ -110,7 +126,7 @@ def test_eval_rollout_is_batch_major():
 
     _, trajectories = eval_rollout(
         _Env(),
-        _Policy(),
+        _EvalPolicy(),
         num_envs,
         jax.random.key(0),
         max_steps=num_steps,
@@ -119,3 +135,13 @@ def test_eval_rollout_is_batch_major():
 
     assert trajectories.obs.shape == (num_trajectories, num_steps, 1)
     assert trajectories.env_state.shape == (num_trajectories, num_steps)
+    assert jnp.array_equal(trajectories.env_state[0], 2 * jnp.arange(1, num_steps + 1))
+
+
+def test_network_eval_sets_layer_mode_and_resets_state():
+    network = _StatefulPolicy()
+
+    network.eval()
+
+    assert network.dropout.deterministic
+    assert jnp.array_equal(network.state[...], jnp.zeros(2))
