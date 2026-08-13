@@ -9,15 +9,14 @@ from jaxtyping import Array, Float, Int, Key
 
 from modrax.alg.base import Alg
 from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
+from modrax.metrics import compute_training_metrics
 from modrax.network.base import Network
-from modrax.optimizer import Optimizer
-from modrax.rollout.trajectory_rollout import trajectory_rollout
+from modrax.optimizer import Optimizer, update_network_minibatches
+from modrax.rollout import trajectory_rollout
 from modrax.types import Config
 from modrax.utils import (
-    compute_training_metrics,
-    make_trajectory_minibatches,
-    make_transition_minibatches,
-    update_network_minibatches,
+    batch_trajectories,
+    batch_transitions,
 )
 
 
@@ -208,7 +207,7 @@ class PQNAlg(Alg):
                     "env_state": env_state,
                 }
                 minibatch_size = self.cfg.num_envs // self.cfg.num_minibatches
-                minibatches = make_trajectory_minibatches(all_data, epoch_key, minibatch_size)
+                minibatches = batch_trajectories(all_data, epoch_key, minibatch_size)
 
                 loss, infos = update_network_minibatches(
                     network, optimizer, minibatches, pqn_recurrent_loss, self.cfg
@@ -235,7 +234,7 @@ class PQNAlg(Alg):
                 minibatch_size = (
                     self.cfg.num_envs * self.cfg.num_timesteps
                 ) // self.cfg.num_minibatches
-                minibatches = make_transition_minibatches(all_data, epoch_key, minibatch_size)
+                minibatches = batch_transitions(all_data, epoch_key, minibatch_size)
 
                 loss, infos = update_network_minibatches(
                     network, optimizer, minibatches, pqn_loss, self.cfg

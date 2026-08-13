@@ -5,8 +5,7 @@ from flax import nnx
 from modrax.env import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 from modrax.eval import eval_rollout
 from modrax.network import Network
-from modrax.rollout.trajectory_rollout import trajectory_rollout
-from modrax.rollout.transitions_rollout import transitions_rollout
+from modrax.rollout import trajectory_rollout, trajectory_to_transitions
 
 
 class _Policy(Network):
@@ -100,23 +99,21 @@ def test_random_actions_use_per_step_keys():
     assert jnp.array_equal(trajectory.actions, expected_actions)
 
 
-def test_transition_rollout_is_batch_major():
+def test_trajectory_to_transitions_adds_next_observations():
     num_envs = 3
     num_steps = 5
-    state = StateWithMetrics(
-        env_state=jnp.zeros(num_envs),
-        obs=jnp.zeros((num_envs, 2)),
-        action_mask=jnp.ones((num_envs, 4), dtype=jnp.bool_),
-        info={},
-        episode_return=jnp.zeros(num_envs),
-        episode_length=jnp.zeros(num_envs, dtype=jnp.int32),
-    )
+    env = _Env()
+    state = env.reset(jax.random.split(jax.random.key(0), num_envs))
 
-    _, transitions = transitions_rollout(_Policy(), _step, state, num_steps, jax.random.key(0))
+    final_state, trajectory = trajectory_rollout(_Policy(), env.step, state, num_steps, jax.random.key(1))
+    transitions = trajectory_to_transitions(trajectory, final_state)
 
-    assert transitions.obs.shape == (num_envs, num_steps, 2)
+    assert transitions.obs.shape == (num_envs, num_steps, 1)
+    assert transitions.next_obs.shape == (num_envs, num_steps, 1)
     assert transitions.actions.shape == (num_envs, num_steps)
     assert transitions.rewards.shape == (num_envs, num_steps)
+    assert jnp.array_equal(transitions.next_obs[0, :, 0], jnp.arange(1, num_steps + 1))
+    assert jnp.array_equal(transitions.truncations, trajectory.truncations)
 
 
 def test_eval_rollout_is_batch_major():

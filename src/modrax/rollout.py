@@ -11,9 +11,7 @@ from modrax.network.base import Network
 
 @struct.dataclass
 class Trajectory:
-    """A sequence of experience collected over T steps from B parallel envs.
-    Returned in (B, T, ...) order.
-    """
+    """A sequence of experience collected over T steps from B parallel envs."""
 
     obs: Float[Array, "B T ..."]
     info: Any
@@ -22,8 +20,25 @@ class Trajectory:
     action_masks: Float[Array, "B T A"]
     network_output: Any
     dones: Bool[Array, "B T"]
-    # Marks steps before per-environment termination in episodic mode.
+    truncations: Bool[Array, "B T"]
     valid_mask: Bool[Array, "B T"]
+    episode_returns: Float[Array, "B T"]
+    episode_lengths: Float[Array, "B T"]
+
+
+@struct.dataclass
+class Transition:
+    """A batch of independently sampleable transitions in (B, T, ...) order."""
+
+    obs: Float[Array, "B T ..."]
+    next_obs: Float[Array, "B T ..."]
+    info: Any
+    actions: Shaped[Array, "B T ..."]
+    rewards: Float[Array, "B T"]
+    action_masks: Float[Array, "B T A"]
+    network_output: Any
+    dones: Bool[Array, "B T"]
+    truncations: Bool[Array, "B T"]
     episode_returns: Float[Array, "B T"]
     episode_lengths: Float[Array, "B T"]
 
@@ -37,27 +52,7 @@ def trajectory_rollout(
     random_action=False,
     episodic=False,
 ) -> tuple[StateWithMetrics, Trajectory]:
-    """Collect num_steps of experience from B parallel envs for on-policy training.
-
-    Resets network hidden state on episode boundaries. Output arrays are transposed
-    to (B, T, ...) order for convenient per-env processing.
-
-    Args:
-        network: Policy network (state is reset when an env terminates).
-        step_fn: env.step — called as step_fn(state, action, keys).
-        env_state: Initial batched env state with shape B.
-        num_steps: Number of environment steps to collect.
-        key: Single PRNG key.
-        random_action: If True, sample uniformly from valid actions (ignoring the network policy).
-        episodic: If True, `valid_mask` is False for any step taken after a per-env
-            terminal transition. Intended for use with envs configured with
-            auto_reset=False so episodes actually end. If False, `valid_mask` is
-            all True.
-
-    Returns:
-        final_env_state: Env state after the last step.
-        trajectory: Trajectory with arrays in (B, T, ...) order.
-    """
+    """Collect num_steps of experience from B parallel envs."""
 
     def step(carry, step_key):
         network, env_state, alive = carry
@@ -66,20 +61,16 @@ def trajectory_rollout(
 
         policy_key, random_action_key, env_key = jax.random.split(step_key, 3)
 
-        # Run network
         action, out = network.policy(env_state, policy_key)
         if random_action:
             uniform_logits = jnp.where(action_mask, 0.0, -jnp.inf)
             action = jax.random.categorical(random_action_key, uniform_logits)
 
-        # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])
         step_output, new_env_state = step_fn(env_state, action, env_keys)
         network.reset_episodes(step_output.done)
 
         valid_mask = alive if episodic else jnp.ones_like(alive)
-        # In episodic mode envs stay in their terminal state, so step_output.done can
-        # stay True for many steps. Only count the transition (first done) as terminal.
         dones = step_output.done & alive if episodic else step_output.done
 
         trajectory = Trajectory(
@@ -90,6 +81,7 @@ def trajectory_rollout(
             action_masks=action_mask,
             network_output=out,
             dones=dones,
+            truncations=step_output.truncation,
             valid_mask=valid_mask,
             episode_returns=env_state.episode_return + step_output.reward,
             episode_lengths=env_state.episode_length + 1,
@@ -103,15 +95,28 @@ def trajectory_rollout(
     (_, final_env_state, final_alive), trajectory = nnx.scan(step)(
         (network, env_state, init_alive), step_keys
     )
-
-    trajectory = jax.tree_util.tree_map(
-        lambda x: jnp.swapaxes(x, 0, 1), trajectory
-    )  # Transpose to (B, T, ...)
+    trajectory = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), trajectory)
 
     if episodic:
-        # Truncate ongoing episodes by marking the last step as done for any env
-        # still alive at the end of the rollout.
         new_dones = trajectory.dones.at[:, -1].set(trajectory.dones[:, -1] | final_alive)
         trajectory = trajectory.replace(dones=new_dones)
 
     return final_env_state, trajectory
+
+
+def trajectory_to_transitions(trajectory: Trajectory, final_env_state: StateWithMetrics) -> Transition:
+    """Convert a continuing rollout trajectory into replay transitions."""
+    next_obs = jnp.concatenate([trajectory.obs[:, 1:], final_env_state.obs[:, None]], axis=1)
+    return Transition(
+        obs=trajectory.obs,
+        next_obs=next_obs,
+        info=trajectory.info,
+        actions=trajectory.actions,
+        rewards=trajectory.rewards,
+        action_masks=trajectory.action_masks,
+        network_output=trajectory.network_output,
+        dones=trajectory.dones,
+        truncations=trajectory.truncations,
+        episode_returns=trajectory.episode_returns,
+        episode_lengths=trajectory.episode_lengths,
+    )

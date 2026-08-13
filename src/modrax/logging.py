@@ -13,6 +13,7 @@ import imageio.v3 as iio
 import jax
 import numpy as np
 import wandb
+from rich import print
 
 from modrax.env import Env
 from modrax.env.base import StateWithMetrics
@@ -28,7 +29,38 @@ class WandbConfig:
     entity: str | None = None
     run_name: str | None = None
     group: str | None = None
-    tags: tuple[str, ...] | None = None
+    tags: list[str] | None = None
+
+
+def to_python_float(value: Any, ndigits: int = 4) -> float:
+    """Convert value to Python float, handling JAX arrays."""
+    if hasattr(value, "mean"):
+        return round(float(value.item()), ndigits)
+    return round(float(value), ndigits)
+
+
+def format_metrics(metrics: dict[str, Any], precision: int = 3) -> dict[str, str]:
+    """Format numeric metrics as strings for display."""
+    formatted = {}
+    for key, value in metrics.items():
+        value = to_python_float(value, precision)
+        formatted[key] = value
+    return formatted
+
+
+def pprint(d: dict[str, Any], ndigits: int = 3) -> None:
+    """Pretty print a nested dict with formatted float leaves."""
+
+    def format_value(value: Any):
+        if isinstance(value, dict):
+            return {k: format_value(v) for k, v in value.items()}
+        elif isinstance(value, float) or isinstance(value, int):
+            return round(value, ndigits)
+        else:
+            return str(value)
+
+    print(format_value(d))
+    return
 
 
 def flatten_config(config: TrainConfig) -> dict[str, Any]:

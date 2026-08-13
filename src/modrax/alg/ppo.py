@@ -8,15 +8,12 @@ from jaxtyping import Array, Float, Int, Key
 
 from modrax.alg.base import Alg
 from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
+from modrax.metrics import compute_training_metrics
 from modrax.network.base import Network
-from modrax.optimizer import Optimizer
-from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
+from modrax.optimizer import Optimizer, update_network_minibatches
+from modrax.rollout import Trajectory, trajectory_rollout
 from modrax.types import Config
-from modrax.utils import (
-    compute_training_metrics,
-    make_trajectory_minibatches,
-    update_network_minibatches,
-)
+from modrax.utils import batch_trajectories
 
 
 @dataclass(frozen=True)
@@ -207,7 +204,7 @@ class PPOAlg(Alg):
         epoch_keys = jax.random.split(update_key, self.cfg.num_updates)
         for epoch_key in epoch_keys:
             minibatch_size = self.cfg.num_envs // self.cfg.num_minibatches
-            minibatches = make_trajectory_minibatches(all_data, epoch_key, minibatch_size)
+            minibatches = batch_trajectories(all_data, epoch_key, minibatch_size)
             loss, infos = update_network_minibatches(
                 network, optimizer, minibatches, ppo_loss, self.cfg
             )

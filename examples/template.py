@@ -7,15 +7,13 @@ from flax import nnx, struct
 
 from modrax.alg.base import Alg
 from modrax.env.base import Env, StateWithMetrics
+from modrax.metrics import compute_training_metrics
 from modrax.network import Network
-from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.rollout.transitions_rollout import transitions_rollout
+from modrax.optimizer import Optimizer, OptimizerConfig, update_network_minibatches
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.utils import (
     add_cli,
-    compute_training_metrics,
-    make_transition_minibatches,
-    update_network_minibatches,
+    batch_transitions,
 )
 
 """ CONFIG """

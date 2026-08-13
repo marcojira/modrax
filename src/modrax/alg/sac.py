@@ -10,11 +10,11 @@ from jaxtyping import Array, Float, Key
 from modrax.alg.base import Alg
 from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import ContinuousActionSpec, Env, StateWithMetrics
+from modrax.metrics import finite_mean
 from modrax.network.base import Network
-from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.rollout.transitions_rollout import Transition, transitions_rollout
+from modrax.optimizer import Optimizer, OptimizerConfig, ema_update
+from modrax.rollout import Transition, trajectory_rollout, trajectory_to_transitions
 from modrax.types import Config
-from modrax.utils import ema_update, finite_mean
 
 
 @dataclass(frozen=True)
@@ -221,10 +221,9 @@ class SACAlg(Alg):
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         num_steps = int(self.cfg.init_buffer_size / self.cfg.num_envs)
 
-        env_state, trajectories = transitions_rollout(
-            network, self.env.step, env_state, num_steps, key
-        )
-        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), trajectories)
+        env_state, trajectory = trajectory_rollout(network, self.env.step, env_state, num_steps, key)
+        transitions = trajectory_to_transitions(trajectory, env_state)
+        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions)
 
         # Init buffer
         self.buffer = ReplayBuffer(max_size=alg_cfg.buffer_size)
@@ -242,10 +241,9 @@ class SACAlg(Alg):
         metrics = {}
 
         # Generate data
-        env_state, trajectories = transitions_rollout(
-            network, self.env.step, env_state, 1, rollout_key
-        )
-        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), trajectories)
+        env_state, trajectory = trajectory_rollout(network, self.env.step, env_state, 1, rollout_key)
+        transitions = trajectory_to_transitions(trajectory, env_state)
+        transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions)
         buffer_state = self.buffer.add(buffer_state, transitions)
 
         # Update running normalization statistics of observations

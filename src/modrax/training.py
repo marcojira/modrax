@@ -8,9 +8,11 @@ from modrax.alg.base import Alg
 from modrax.logging import (
     WandbConfig,
     finish_logging,
+    format_metrics,
     init_logging,
     log_metrics,
     log_trajectories,
+    pprint,
 )
 from modrax.optimizer import OptimizerConfig
 from modrax.types import Config
@@ -25,7 +27,6 @@ from tqdm import tqdm
 from modrax.env import EnvConfig
 from modrax.eval import evaluate
 from modrax.network.base import Network
-from modrax.utils import format_metrics, pprint
 
 
 @dataclass(frozen=True)

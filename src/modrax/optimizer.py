@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Callable, Literal
 
+import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
+from jaxtyping import Array, Float
 
 from modrax.network.base import Network
 from modrax.types import Config
@@ -67,3 +69,53 @@ class Optimizer(nnx.Optimizer):
 
         _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
         self.update(grads)
+
+
+def update_network_minibatches(
+    network: nnx.Module,
+    optimizer: Optimizer,
+    minibatches: Any,
+    loss_fn: Callable[[Network, Any, Any], tuple[Float[Array, ""], dict]],
+    config,
+):
+    """Efficiently scan loss computation and gradient updates over minibatches.
+    See https://flax.readthedocs.io/en/stable/guides/performance.html
+
+    loss_fn(network, minibatch, config) -> (scalar_loss, info_dict)
+    """
+
+    def _update(graph_state, minibatch: Any):
+        graphdef, state = graph_state
+        network, optimizer = nnx.merge(graphdef, state)
+
+        (loss, info), grads = nnx.value_and_grad(loss_fn, has_aux=True)(network, minibatch, config)
+        optimizer.update(grads)
+
+        graph_state = nnx.split((network, optimizer))
+        return graph_state, (loss, info)
+
+    # Scan update over minibatches
+    graph_state = nnx.split((network, optimizer))
+    graph_state, (loss, infos) = jax.lax.scan(
+        _update,
+        graph_state,
+        minibatches,
+    )
+
+    # Update objects after training
+    nnx.update((network, optimizer), graph_state[-1])
+    return loss, infos
+
+
+def ema_update(source: nnx.Module, target: nnx.Module, tau: float):
+    """Update target network parameters with exponential moving average of source."""
+    source_params = nnx.state(source, nnx.Param)
+    target_params = nnx.state(target, nnx.Param)
+    new_target_params = jax.tree.map(
+        lambda s, t: tau * s + (1 - tau) * t, source_params, target_params
+    )
+    nnx.update(target, new_target_params)
+
+    # Copy non-parameter state (e.g. BatchNorm running stats) directly
+    source_batch_stats = nnx.state(source, nnx.BatchStat)
+    nnx.update(target, source_batch_stats)
