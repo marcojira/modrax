@@ -1,71 +1,38 @@
 # Custom
 archive/
 CLAUDE.md
+AGENTS.md
+notes/
 out/
-projects/
-dev.py
-exps/
 *EXP_*
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
 
 # Virtual environments
 .env
-.venv
-venv/
-ENV/
-env.bak/
-venv.bak/
+.venv/
 .uv/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
+*.sw[op]
 *~
 
-# Testing
+# Tool caches
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
-
-# Type checking
 .mypy_cache/
-.pytype/
 .ruff_cache/
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Logs
-*.log
 
 # OS
 .DS_Store
-Thumbs.db
 
 # Experiment outputs
 runs/
@@ -73,3 +40,4 @@ outputs/
 checkpoints/
 wandb/
 exps/
+*.log
