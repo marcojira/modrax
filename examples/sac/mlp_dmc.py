@@ -115,7 +115,7 @@ def main(cfg: MuJoCoPlaygroundConfig):
     optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, optimizer_config)
     alg = SACAlg(env, network, optimizer, alg_config, jax.random.key(train_config.seed))
 
-    trained_network = train(env, network, optimizer, alg, train_config)
+    trained_network = train(alg, train_config)
     return trained_network
 
 

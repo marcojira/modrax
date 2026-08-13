@@ -9,7 +9,7 @@ import imageio.v3 as iio
 import wandb
 
 from modrax.alg.base import Alg
-from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.optimizer import OptimizerConfig
 from modrax.types import Config
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -99,29 +99,30 @@ def flatten_cfg(config: TrainConfig) -> dict:
     return flat
 
 
-def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: TrainConfig) -> Network:
+def train(algorithm: Alg, config: TrainConfig) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
-    key = jax.random.key(cfg.seed)
+    key = jax.random.key(config.seed)
+    env = algorithm.env
 
-    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network, nnx.Param)))
+    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(algorithm.network, nnx.Param)))
     print(f"Training a network with {num_params:} parameters...")
 
-    if cfg.display_network:
-        nnx.display(network)
+    if config.display_network:
+        nnx.display(algorithm.network)
 
     # Wandb
-    if cfg.wandb.enabled:
+    if config.wandb.enabled:
         wandb.init(
-            project=cfg.wandb.project,
-            entity=cfg.wandb.entity,
-            name=cfg.wandb.run_name,
-            group=cfg.wandb.group,
-            tags=cfg.wandb.tags,
-            config=flatten_cfg(cfg),
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            name=config.wandb.run_name,
+            group=config.wandb.group,
+            tags=config.wandb.tags,
+            config=flatten_cfg(config),
         )
 
     # Training loop
-    num_epochs = alg.total_steps // (alg.env_steps_per_epoch)
+    num_epochs = algorithm.total_steps // algorithm.env_steps_per_epoch
     pbar = tqdm(range(num_epochs), desc="Training")
     start = time.time()
 
@@ -129,10 +130,10 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         key, epoch_key = jax.random.split(key)
 
         # Alg epoch
-        metrics = alg(epoch_key)
+        metrics = algorithm(epoch_key)
 
         # Metrics
-        total_steps = epoch * alg.env_steps_per_epoch
+        total_steps = epoch * algorithm.env_steps_per_epoch
         metrics["epoch"] = epoch
         metrics["steps_M"] = total_steps / 1e6
         metrics["steps/s"] = total_steps / (time.time() - start)
@@ -140,28 +141,36 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         formatted_metrics = format_metrics(metrics)
         pbar.set_postfix({k: v for k, v in formatted_metrics.items() if not k.startswith("info/")})
 
-        log_metrics(formatted_metrics, cfg, "metrics.jsonl")
+        log_metrics(formatted_metrics, config, "metrics.jsonl")
 
         # Evaluation
-        if cfg.eval_interval and (epoch % cfg.eval_interval == 0 or epoch == num_epochs - 1):
+        if config.eval_interval and (
+            epoch % config.eval_interval == 0 or epoch == num_epochs - 1
+        ):
             eval_key, key = jax.random.split(key)
-            eval_metrics, trajectories = alg.eval(eval_key)
+            eval_metrics, trajectories = algorithm.eval(eval_key)
             eval_metrics["epoch"] = epoch
             eval_metrics["steps_M"] = total_steps / 1e6
             eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}
 
             pprint(eval_metrics)
-            log_metrics(eval_metrics, cfg, "eval.jsonl")
-            log_trajectories(env, trajectories, cfg, epoch, n_trajectories=cfg.num_gif_trajectories)
+            log_metrics(eval_metrics, config, "eval.jsonl")
+            log_trajectories(
+                env,
+                trajectories,
+                config,
+                epoch,
+                n_trajectories=config.num_gif_trajectories,
+            )
 
     # Save checkpoint
-    if cfg.save_path is not None:
-        checkpoint_path = os.path.join(cfg.save_path, "checkpoint")
-        network.save(checkpoint_path)
+    if config.save_path is not None:
+        checkpoint_path = os.path.join(config.save_path, "checkpoint")
+        algorithm.network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
-    if cfg.wandb.enabled:
+    if config.wandb.enabled:
         wandb.finish()
 
     print("\nTraining completed!")
-    return network
+    return algorithm.network

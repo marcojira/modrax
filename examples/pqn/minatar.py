@@ -106,7 +106,7 @@ def main(cfg: MinatarConfig):
     optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
     alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key)
 
-    train(env, network, optimizer, alg, cfg)
+    train(alg, cfg)
 
 
 if __name__ == "__main__":

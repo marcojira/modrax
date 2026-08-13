@@ -85,7 +85,7 @@ def main(cfg: Config):
     alg = ...
 
     # TODO: Uncomment once done!
-    # network = train(env, network, optimizer, alg, cfg)
+    # network = train(alg, cfg)
     return network
 
 

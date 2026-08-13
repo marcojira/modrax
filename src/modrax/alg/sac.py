@@ -208,8 +208,7 @@ class SACAlg(Alg):
         alg_cfg: SACConfig,
         key: Key[Array, ""],
     ):
-        self.env = env
-        self.cfg = alg_cfg
+        super().__init__(env, network, optimizer, alg_cfg, key)
         self.total_steps = self.cfg.total_steps
 
         network.eval()

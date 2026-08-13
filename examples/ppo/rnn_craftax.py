@@ -122,7 +122,7 @@ def main(cfg: CraftaxRNNPPOConfig):
     )
     alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key)
 
-    train(env, network, optimizer, alg, cfg)
+    train(alg, cfg)
 
 
 if __name__ == "__main__":
