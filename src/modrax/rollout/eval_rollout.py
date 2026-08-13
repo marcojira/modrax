@@ -20,6 +20,7 @@ def eval_rollout(
 
     Resets the env, runs up to max_steps, and tracks the first completed episode per env.
     If an env never finishes, its accumulated return/length at max_steps is used.
+    Returned trajectories have shape (B, T, ...).
     """
     eval_env_state = env.reset(jax.random.split(key, num_envs))
 
@@ -57,6 +58,7 @@ def eval_rollout(
         ),
         step_keys,
     )
+    trajectories = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), trajectories)
 
     # For envs that never finished, use their accumulated return/length
     episode_returns = jnp.where(done_mask, episode_returns, final_env_state.episode_return)

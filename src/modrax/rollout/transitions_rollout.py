@@ -1,6 +1,7 @@
 from typing import Any, Callable
 
 import jax
+import jax.numpy as jnp
 from flax import nnx, struct
 from jaxtyping import Array, Float, Key
 
@@ -10,19 +11,19 @@ from modrax.network.base import Network
 
 @struct.dataclass
 class Transition:
-    """A single (s, a, s') transition collected per step. Stacked over T steps by transitions_rollout."""
+    """A batch of transitions collected over time in (B, T, ...) order."""
 
-    obs: Float[Array, "B ..."]
-    next_obs: Float[Array, "B ..."]
+    obs: Float[Array, "B T ..."]
+    next_obs: Float[Array, "B T ..."]
     info: Any
-    actions: Float[Array, "B ..."]
-    rewards: Float[Array, " B"]
-    action_masks: Float[Array, "B A"]
+    actions: Float[Array, "B T ..."]
+    rewards: Float[Array, "B T"]
+    action_masks: Float[Array, "B T A"]
     network_output: Any
-    dones: Float[Array, " B"]
-    truncations: Float[Array, " B"]
-    episode_returns: Float[Array, " B"]
-    episode_lengths: Float[Array, " B"]
+    dones: Float[Array, "B T"]
+    truncations: Float[Array, "B T"]
+    episode_returns: Float[Array, "B T"]
+    episode_lengths: Float[Array, "B T"]
 
 
 def transitions_rollout(
@@ -36,7 +37,7 @@ def transitions_rollout(
 
     Unlike trajectory_rollout, this stores both obs and next_obs per step and
     does NOT reset network state on episode boundaries (suited for off-policy methods).
-    Returned Transition arrays have shape [T, B, ...].
+    Returned Transition arrays have shape (B, T, ...).
 
     Args:
         network: Policy network.
@@ -47,7 +48,7 @@ def transitions_rollout(
 
     Returns:
         final_env_state: Env state after the last step.
-        trajectory: Transition of shape [T, B, ...]
+        transitions: Transition with arrays in (B, T, ...) order.
     """
 
     def step(carry, step_key):
@@ -64,7 +65,7 @@ def transitions_rollout(
         env_keys = jax.random.split(env_key, obs.shape[0])
         step_output, new_env_state = step_fn(env_state, action, env_keys)
 
-        trajectory = Transition(
+        transition = Transition(
             obs=obs,
             next_obs=new_env_state.obs,
             info=env_state.info,
@@ -78,15 +79,13 @@ def transitions_rollout(
             episode_lengths=env_state.episode_length + 1,
         )
 
-        return (network, new_env_state), trajectory
+        return (network, new_env_state), transition
 
     step_keys = jax.random.split(key, num_steps)
-    (_, final_env_state), trajectory = nnx.scan(step)((network, env_state), step_keys)
+    (_, final_env_state), transitions = nnx.scan(step)((network, env_state), step_keys)
+    transitions = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), transitions)
 
-    return (
-        final_env_state,
-        trajectory,
-    )
+    return final_env_state, transitions
 
 
 jit_transitions_rollout = nnx.jit(transitions_rollout, static_argnames=["step_fn", "num_steps"])

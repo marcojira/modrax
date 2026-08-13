@@ -15,16 +15,17 @@ class Trajectory:
     Returned in (B, T, ...) order.
     """
 
-    obs: Float[Array, "T B ..."]
+    obs: Float[Array, "B T ..."]
     info: Any
-    actions: Float[Array, "T B ..."]
-    rewards: Float[Array, "T B"]
-    action_masks: Float[Array, "T B A"]
+    actions: Float[Array, "B T ..."]
+    rewards: Float[Array, "B T"]
+    action_masks: Float[Array, "B T A"]
     network_output: Any
-    dones: Float[Array, "T B"]
-    valid_mask: Bool[Array, "T B"] # Marks steps taken before per-env termination in episodic mode (always True otherwise)
-    episode_returns: Float[Array, "T B"]
-    episode_lengths: Float[Array, "T B"]
+    dones: Float[Array, "B T"]
+    # Marks steps before per-environment termination in episodic mode.
+    valid_mask: Bool[Array, "B T"]
+    episode_returns: Float[Array, "B T"]
+    episode_lengths: Float[Array, "B T"]
 
 
 def trajectory_rollout(
@@ -63,13 +64,13 @@ def trajectory_rollout(
         obs = env_state.obs
         action_mask = env_state.action_mask
 
-        policy_key, env_key = jax.random.split(step_key)
+        policy_key, random_action_key, env_key = jax.random.split(step_key, 3)
 
         # Run network
         action, out = network.policy(env_state, policy_key)
         if random_action:
             uniform_logits = jnp.where(action_mask, 0.0, -jnp.inf)
-            action = jax.random.categorical(key, uniform_logits)
+            action = jax.random.categorical(random_action_key, uniform_logits)
 
         # Step environment
         env_keys = jax.random.split(env_key, obs.shape[0])

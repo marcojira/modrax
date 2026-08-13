@@ -74,7 +74,7 @@ def log_trajectories(
     if not (config.save_gif_local or config.save_gif_wandb):
         return
 
-    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:, :n_trajectories], trajectories))
+    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:n_trajectories], trajectories))
 
     for i, frames in enumerate(rendered):
         if config.save_gif_local and config.save_path is not None:

@@ -232,14 +232,14 @@ def ema_update(source: nnx.Module, target: nnx.Module, tau: float):
 
 def render_trajectories(
     env: Env,
-    trajectories: StateWithMetrics,  # [T, B, H, W, 3]
+    trajectories: StateWithMetrics,  # [B, T, ...]
 ) -> list[np.ndarray]:
     """Render trajectories into a list of numpy arrays, one per trajectory.
 
     Each array has shape (T, H, W, 3) with dtype uint8.
     """
-    num_trajectories = trajectories.obs.shape[1]
+    num_trajectories = trajectories.obs.shape[0]
     return [
-        env.batch_render(jax.tree.map(lambda x: x[:, i], trajectories))
+        env.batch_render(jax.tree.map(lambda x: x[i], trajectories))
         for i in range(num_trajectories)
     ]
