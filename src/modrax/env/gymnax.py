@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from gymnax.environments import spaces
 from jaxtyping import Array, Key
+from matplotlib.figure import Figure
 
 from modrax.env.base import (
     ContinuousActionSpec,
@@ -19,7 +20,16 @@ from modrax.env.base import (
     StateWithMetrics,
     StepOutput,
 )
-from modrax.utils import fig_to_rgb_array
+
+
+def fig_to_rgb_array(fig: Figure) -> np.ndarray:
+    """Convert a Matplotlib figure to an RGB array."""
+    fig.canvas.draw()
+    buf = fig.canvas.buffer_rgba()  # type: ignore
+    width, height = fig.canvas.get_width_height()
+    rgb_array = np.frombuffer(buf, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
+    plt.close(fig)
+    return rgb_array
 
 
 @dataclass(frozen=True)

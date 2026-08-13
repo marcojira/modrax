@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 import imageio.v3 as iio
 import jax
+import numpy as np
 import wandb
 
 from modrax.env import Env
 from modrax.env.base import StateWithMetrics
-from modrax.utils import render_trajectories
 
 if TYPE_CHECKING:
     from modrax.training import TrainConfig
@@ -72,6 +72,18 @@ def save_metrics_jsonl(metrics: dict[str, Any], save_path: str) -> None:
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     with open(save_path, "a") as file:
         file.write(json.dumps(metrics) + "\n")
+
+
+def render_trajectories(
+    env: Env,
+    trajectories: StateWithMetrics,
+) -> list[np.ndarray]:
+    """Render trajectories into one array per trajectory."""
+    num_trajectories = trajectories.obs.shape[0]
+    return [
+        env.batch_render(jax.tree.map(lambda x: x[i], trajectories))
+        for i in range(num_trajectories)
+    ]
 
 
 def log_trajectories(
