@@ -71,13 +71,11 @@ class ReplayBuffer:
     def _sample(
         self, state: BufferState, key: Key[Array, ""], batch_size: int
     ) -> tuple[Any, Int[Array, " batch_size"], Float[Array, " batch_size"]]:
-        # Compute sampling probabilities from priorities
-        valid_priorities = jnp.where(
-            jnp.arange(self.max_size) < state.size,
-            state.priorities,
-            0.0,
-        )
-        probs = valid_priorities**self.alpha
+        # Compute sampling probabilities from priorities.
+        # Mask after exponentiating: with alpha=0, 0.0 ** 0.0 == 1.0 would otherwise
+        # resurrect the empty slots and make sampling uniform over the whole buffer.
+        valid = jnp.arange(self.max_size) < state.size
+        probs = jnp.where(valid, state.priorities**self.alpha, 0.0)
         probs = probs / probs.sum()
 
         # Sample indices based on priorities
