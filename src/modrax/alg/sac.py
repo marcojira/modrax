@@ -211,17 +211,18 @@ class SACAlg(Alg):
         if not isinstance(env.action_spec, ContinuousActionSpec):
             raise ValueError("SAC requires a continuous action space")
 
-        super().__init__(env, network, optimizer, alg_cfg, key)
+        super().__init__(env, network, optimizer, alg_cfg)
         self.total_steps = self.cfg.total_steps
 
         network.eval()
         self.target_entropy = -0.5 * math.prod(env.action_spec.shape)
 
         # Generate transitions for initial buffer
-        env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
+        reset_key, rollout_key = jax.random.split(key)
+        env_state = self.env.reset(jax.random.split(reset_key, self.cfg.num_envs))
         num_steps = int(self.cfg.init_buffer_size / self.cfg.num_envs)
 
-        env_state, trajectory = trajectory_rollout(network, self.env.step, env_state, num_steps, key)
+        env_state, trajectory = trajectory_rollout(network, self.env.step, env_state, num_steps, rollout_key)
         transitions = trajectory_to_transitions(trajectory, env_state)
         transitions = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:]), transitions)
 

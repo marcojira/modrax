@@ -21,6 +21,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
 from flax import nnx
+from jaxtyping import Array, Key
 from rich import print
 from tqdm import tqdm
 
@@ -49,9 +50,8 @@ class TrainConfig(Config):
     num_gif_trajectories: int = 5
 
 
-def train(algorithm: Alg, config: TrainConfig) -> Network:
+def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
-    key = jax.random.key(config.seed)
     env = algorithm.env
 
     num_params = sum(p.size for p in jax.tree.leaves(nnx.state(algorithm.network, nnx.Param)))

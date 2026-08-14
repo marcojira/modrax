@@ -14,7 +14,7 @@ class Alg(ABC):
     env_steps_per_epoch: int
     state: Any
 
-    def __init__(self, env: Env, network: Network, optimizer: Optimizer, cfg, key: Key[Array, ""]):
+    def __init__(self, env: Env, network: Network, optimizer: Optimizer, cfg):
         self.env = env
         self.network = network
         self.optimizer = optimizer

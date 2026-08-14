@@ -17,7 +17,6 @@ examples = list(
         in [
             "examples/pqn/gtrxl_craftax.py",
             "examples/pqn/rnn_craftax.py",
-            "examples/template.py",
         ]
         else example
         for example in examples

@@ -1,8 +1,6 @@
 import math
 import os
-
-from modrax.env.base import StateWithMetrics
-from modrax.utils import add_cli
+from dataclasses import dataclass
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
@@ -22,11 +20,25 @@ from modrax.alg.sac import (
     SACOptimizer,
     SACOptimizerConfig,
 )
+from modrax.env.base import StateWithMetrics
 from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
 from modrax.network.mlp import MLP
 from modrax.network.running_norm import RunningNorm
 from modrax.training import TrainConfig, WandbConfig, train
 from modrax.types import Shape
+from modrax.utils import add_cli
+
+
+@dataclass(frozen=True)
+class MuJoCoSACConfig(TrainConfig):
+    env_cfg: MuJoCoPlaygroundConfig = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
+    network_cfg: SACNetworkConfig = SACNetworkConfig(running_norm=True)
+    optimizer_cfg: SACOptimizerConfig = SACOptimizerConfig()
+    alg_cfg: SACConfig = SACConfig()
+    wandb: WandbConfig = WandbConfig(enabled=True)
+    eval_interval: int = 5
+    seed: int = 0
+    save_gif_wandb: bool = True
 
 
 class MLPActor(Actor):
@@ -96,32 +108,16 @@ class MuJoCoSACNetwork(SACNetwork):
 
 
 @add_cli
-def main(cfg: MuJoCoPlaygroundConfig):
-    env_config = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
-    network_config = SACNetworkConfig(running_norm=True)
-    optimizer_config = SACOptimizerConfig()
-    alg_config = SACConfig()
-    train_config = TrainConfig(
-        seed=0,
-        env_cfg=env_config,
-        network_cfg=network_config,
-        optimizer_cfg=optimizer_config,
-        alg_cfg=alg_config,
-        save_path=None,
-        wandb=WandbConfig(enabled=True),
-        save_gif_wandb=True,
-        eval_interval=5,
-    )
+def main(cfg: MuJoCoSACConfig):
+    key = jax.random.key(cfg.seed)
+    network_key, alg_key, train_key = jax.random.split(key, 3)
 
-    env = MuJoCoPlaygroundEnv(env_config)
-    network = MuJoCoSACNetwork(
-        env.obs_shape, env.action_size, network_config, nnx.Rngs(train_config.seed)
-    )
-    optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, optimizer_config)
-    alg = SACAlg(env, network, optimizer, alg_config, jax.random.key(train_config.seed))
+    env = MuJoCoPlaygroundEnv(cfg.env_cfg)
+    network = MuJoCoSACNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
+    optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, cfg.optimizer_cfg)
+    alg = SACAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
 
-    trained_network = train(alg, train_config)
-    return trained_network
+    train(alg, cfg, key=train_key)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import jax
 import jax.numpy as jnp
 from flax import nnx
 
@@ -22,6 +23,7 @@ class _Alg:
 
     def __call__(self, key):
         return {"loss": 0.0}
+
 
 def test_train_uses_algorithm_dependencies(monkeypatch):
     alg = _Alg()
@@ -46,7 +48,7 @@ def test_train_uses_algorithm_dependencies(monkeypatch):
         wandb=SimpleNamespace(enabled=False),
     )
 
-    network = training.train(alg, cfg)
+    network = training.train(alg, cfg, key=jax.random.key(0))
 
     assert network is alg.network
     assert rendered == [(alg.env, alg.trajectories)]

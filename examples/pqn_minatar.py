@@ -15,16 +15,15 @@ from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
-class MinatarNetworkConfig(Config):
+class MinAtarNetworkConfig(Config):
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
-    eps: float = 0.1
 
 
 @dataclass(frozen=True)
-class MinatarConfig(TrainConfig):
+class MinAtarConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
-    network_cfg: MinatarNetworkConfig = MinatarNetworkConfig(norm_type="layer_norm")
+    network_cfg: MinAtarNetworkConfig = MinAtarNetworkConfig(norm_type="layer_norm")
     optimizer_cfg: OptimizerConfig = OptimizerConfig(
         optimizer_type="adamw", learning_rate=5e-4, lr_decay=True, gradient_clip=10
     )
@@ -35,8 +34,8 @@ class MinatarConfig(TrainConfig):
     save_gif_wandb: bool = True
 
 
-class MinatarNetwork(PQNNetwork):
-    def __init__(self, obs_shape, action_size: int, cfg: MinatarNetworkConfig, rngs: nnx.Rngs):
+class MinAtarNetwork(PQNNetwork):
+    def __init__(self, obs_shape, action_size: int, cfg: MinAtarNetworkConfig, rngs: nnx.Rngs):
         self.is_recurrent = False
         self.cfg = cfg
         self.eps = nnx.Variable(jnp.array(1.0))
@@ -103,16 +102,17 @@ class MinatarNetwork(PQNNetwork):
 
 
 @add_cli
-def main(cfg: MinatarConfig):
+def main(cfg: MinAtarConfig):
     key = jax.random.key(cfg.seed)
+    network_key, alg_key, train_key = jax.random.split(key, 3)
 
     # Init objects
     env = GymnaxEnv(cfg.env_cfg)
-    network = MinatarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(cfg.seed))
+    network = MinAtarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
     optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
-    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=key)
+    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
 
-    train(alg, cfg)
+    train(alg, cfg, key=train_key)
 
 
 if __name__ == "__main__":

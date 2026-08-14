@@ -114,18 +114,23 @@ class CraftaxRNNNetwork(PPONetwork):
 @add_cli
 def main(cfg: CraftaxRNNPPOConfig):
     key = jax.random.key(cfg.seed)
+    network_key, alg_key, train_key = jax.random.split(key, 3)
 
     # Init objects
     env = CraftaxEnv(cfg.env_cfg)
     network = CraftaxRNNNetwork(
-        env.obs_shape, env.action_size, cfg.alg_cfg.num_envs, cfg.network_cfg, nnx.Rngs(cfg.seed)
+        env.obs_shape,
+        env.action_size,
+        cfg.alg_cfg.num_envs,
+        cfg.network_cfg,
+        nnx.Rngs(network_key),
     )
     optimizer = Optimizer(
         cfg.optimizer_cfg, network, total_num_updates=compute_total_updates(cfg.alg_cfg)
     )
-    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=key)
+    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
 
-    train(alg, cfg)
+    train(alg, cfg, key=train_key)
 
 
 if __name__ == "__main__":

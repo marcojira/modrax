@@ -170,7 +170,7 @@ class PQNAlg(Alg):
         if not isinstance(env.action_spec, DiscreteActionSpec):
             raise ValueError("PQN requires a discrete action space")
 
-        super().__init__(env, network, optimizer, cfg, key)
+        super().__init__(env, network, optimizer, cfg)
         self.total_steps = cfg.total_steps
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps
         self.num_epochs = self.total_steps // self.env_steps_per_epoch

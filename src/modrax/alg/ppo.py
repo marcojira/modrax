@@ -171,7 +171,7 @@ class PPOAlg(Alg):
         if not isinstance(env.action_spec, DiscreteActionSpec):
             raise ValueError("PPO requires a discrete action space")
 
-        super().__init__(env, network, optimizer, cfg, key)
+        super().__init__(env, network, optimizer, cfg)
         self.total_steps = cfg.total_steps
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
         self.num_epochs = self.total_steps // self.env_steps_per_epoch
