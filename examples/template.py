@@ -8,24 +8,24 @@ import jax
 from flax import nnx, struct
 from jaxtyping import Array, Key
 
-from modrax.alg.base import Alg
+from modrax.alg.base import Alg, AlgConfig, OptimizerConfig, create_optimizer
 from modrax.cli import add_cli
 from modrax.env.base import Env, StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
-from modrax.network import Network
+from modrax.network import Network, NetworkConfig
 from modrax.network.mlp import MLP
-from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 
 
 @dataclass(frozen=True)
-class NetworkConfig:
+class MyNetworkConfig(NetworkConfig):
     hidden_dims: tuple[int, ...] = (64, 64)
 
 
 @dataclass(frozen=True)
-class AlgConfig:
+class MyAlgConfig(AlgConfig):
+    optimizer_cfg: OptimizerConfig = OptimizerConfig()
     total_steps: int = 100_000
     num_envs: int = 16
     num_timesteps: int = 128
@@ -34,15 +34,14 @@ class AlgConfig:
 @dataclass(frozen=True)
 class Config(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="CartPole-v1")
-    network_cfg: NetworkConfig = NetworkConfig()
-    optimizer_cfg: OptimizerConfig = OptimizerConfig()
-    alg_cfg: AlgConfig = AlgConfig()
+    network_cfg: MyNetworkConfig = MyNetworkConfig()
+    alg_cfg: MyAlgConfig = MyAlgConfig()
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
     seed: int = 0
 
 
 class MyNetwork(Network):
-    def __init__(self, obs_shape: tuple[int, ...], num_actions: int, cfg: NetworkConfig, rngs: nnx.Rngs):
+    def __init__(self, obs_shape: tuple[int, ...], num_actions: int, cfg: MyNetworkConfig, rngs: nnx.Rngs):
         self.model = MLP(
             math.prod(obs_shape),
             cfg.hidden_dims,
@@ -67,7 +66,7 @@ class MyAlgState:
     step: int
 
 
-def loss_fn(network: MyNetwork, minibatch, config: AlgConfig):
+def loss_fn(network: MyNetwork, minibatch, config: MyAlgConfig):
     """Compute the algorithm-specific loss for one minibatch."""
     raise NotImplementedError
 
@@ -77,14 +76,13 @@ class MyAlg(Alg):
         self,
         env: Env,
         network: MyNetwork,
-        optimizer: Optimizer,
-        cfg: AlgConfig,
+        cfg: MyAlgConfig,
         key: Key[Array, ""],
     ):
-        super().__init__(env, network, optimizer, cfg)
-        self.total_steps = cfg.total_steps
+        super().__init__(env, network, cfg)
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps
 
+        optimizer = create_optimizer(network, cfg.optimizer_cfg)
         env_state = env.reset(jax.random.split(key, cfg.num_envs))
         self.state = MyAlgState(nnx.split((network, optimizer)), env_state, 0)
 
@@ -100,8 +98,7 @@ def main(cfg: Config):
 
     env = GymnaxEnv(cfg.env_cfg)
     network = MyNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
-    optimizer = Optimizer(cfg.optimizer_cfg, network)
-    alg = MyAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
+    alg = MyAlg(env, network, cfg.alg_cfg, key=alg_key)
 
     train(alg, cfg, key=train_key)
 

@@ -7,19 +7,20 @@ import jax
 from flax import nnx
 from jaxtyping import Array, Float, Key
 
-from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput, compute_total_updates
+from modrax.alg.base import OptimizerConfig
+from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput
 from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.craftax import CraftaxConfig, CraftaxEnv
+from modrax.network import NetworkConfig
 from modrax.network.mlp import MLP
 from modrax.network.rnn import NnxRNN
-from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
 
 
 @dataclass(frozen=True)
-class CraftaxRNNNetworkConfig:
+class CraftaxRNNNetworkConfig(NetworkConfig):
     encoder_dim: int = 256
     rnn_hidden_dim: int = 256
     cell_type: str = "lstm"
@@ -35,10 +36,8 @@ class CraftaxRNNPPOConfig(TrainConfig):
         optimistic_reset=True,
     )
     network_cfg: CraftaxRNNNetworkConfig = CraftaxRNNNetworkConfig()
-    optimizer_cfg: OptimizerConfig = OptimizerConfig(
-        learning_rate=2e-4, gradient_clip=1.0, lr_decay=True
-    )
     alg_cfg: PPOConfig = PPOConfig(
+        optimizer_cfg=OptimizerConfig(learning_rate=2e-4, gradient_clip=1.0, lr_decay=True),
         total_steps=1_000_000_000,
         num_gen_steps=129,
         num_minibatches=8,
@@ -124,10 +123,7 @@ def main(cfg: CraftaxRNNPPOConfig):
         cfg.network_cfg,
         nnx.Rngs(network_key),
     )
-    optimizer = Optimizer(
-        cfg.optimizer_cfg, network, total_num_updates=compute_total_updates(cfg.alg_cfg)
-    )
-    alg = PPOAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
+    alg = PPOAlg(env, network, cfg.alg_cfg, key=alg_key)
 
     train(alg, cfg, key=train_key)
 

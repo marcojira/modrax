@@ -4,17 +4,18 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput, compute_total_updates
+from modrax.alg.base import OptimizerConfig
+from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput
 from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
-from modrax.optimizer import Optimizer, OptimizerConfig
+from modrax.network import NetworkConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, WandbConfig, train
 
 
 @dataclass(frozen=True)
-class MinAtarNetworkConfig:
+class MinAtarNetworkConfig(NetworkConfig):
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
 
@@ -23,10 +24,11 @@ class MinAtarNetworkConfig:
 class MinAtarConfig(TrainConfig):
     env_cfg: GymnaxConfig = GymnaxConfig(env_name="Asterix-MinAtar")
     network_cfg: MinAtarNetworkConfig = MinAtarNetworkConfig(norm_type="layer_norm")
-    optimizer_cfg: OptimizerConfig = OptimizerConfig(
-        optimizer_type="adamw", learning_rate=5e-4, lr_decay=True, gradient_clip=10
+    alg_cfg: PQNConfig = PQNConfig(
+        optimizer_cfg=OptimizerConfig(
+            optimizer_type="adamw", learning_rate=5e-4, lr_decay=True, gradient_clip=10
+        )
     )
-    alg_cfg: PQNConfig = PQNConfig()
     wandb: WandbConfig = WandbConfig(enabled=False, project="modrax")
     eval_interval: int = 250
     seed: int = 0
@@ -108,8 +110,7 @@ def main(cfg: MinAtarConfig):
     # Init objects
     env = GymnaxEnv(cfg.env_cfg)
     network = MinAtarNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
-    optimizer = Optimizer(cfg.optimizer_cfg, network, compute_total_updates(cfg.alg_cfg))
-    alg = PQNAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
+    alg = PQNAlg(env, network, cfg.alg_cfg, key=alg_key)
 
     train(alg, cfg, key=train_key)
 

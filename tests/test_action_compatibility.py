@@ -18,14 +18,14 @@ def test_discrete_algorithms_reject_continuous_actions():
     key = jax.random.key(0)
 
     with pytest.raises(ValueError, match="PPO requires a discrete action space"):
-        PPOAlg(env, None, None, PPOConfig(), key)
+        PPOAlg(env, None, PPOConfig(), key)
 
     with pytest.raises(ValueError, match="PQN requires a discrete action space"):
-        PQNAlg(env, None, None, PQNConfig(), key)
+        PQNAlg(env, None, PQNConfig(), key)
 
 
 def test_sac_rejects_discrete_actions():
     env = _Env(DiscreteActionSpec(num_actions=2))
 
     with pytest.raises(ValueError, match="SAC requires a continuous action space"):
-        SACAlg(env, None, None, SACConfig(), jax.random.key(0))
+        SACAlg(env, None, SACConfig(), jax.random.key(0))

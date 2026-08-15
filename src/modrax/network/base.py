@@ -13,6 +13,8 @@ from modrax.env.base import StateWithMetrics
 
 @dataclass(frozen=True)
 class NetworkConfig:
+    """Marker base for consistent network configuration typing."""
+
     pass
 
 

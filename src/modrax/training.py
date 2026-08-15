@@ -4,7 +4,7 @@ import os
 import time
 from dataclasses import dataclass, field
 
-from modrax.alg.base import Alg
+from modrax.alg.base import Alg, AlgConfig
 from modrax.logging import (
     WandbConfig,
     finish_logging,
@@ -14,7 +14,6 @@ from modrax.logging import (
     log_trajectories,
     pprint,
 )
-from modrax.optimizer import OptimizerConfig
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -26,13 +25,14 @@ from tqdm import tqdm
 
 from modrax.env import EnvConfig
 from modrax.eval import evaluate
-from modrax.network.base import Network
+from modrax.network.base import Network, NetworkConfig
 
 
 @dataclass(frozen=True)
 class TrainConfig:
     env_cfg: EnvConfig
-    optimizer_cfg: OptimizerConfig
+    network_cfg: NetworkConfig
+    alg_cfg: AlgConfig
 
     seed: int
 
@@ -60,7 +60,7 @@ def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
     init_logging(config)
 
     # Training loop
-    num_epochs = algorithm.total_steps // algorithm.env_steps_per_epoch
+    num_epochs = algorithm.cfg.total_steps // algorithm.env_steps_per_epoch
     pbar = tqdm(range(num_epochs), desc="Training")
     start = time.time()
 

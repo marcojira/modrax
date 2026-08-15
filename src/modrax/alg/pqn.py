@@ -7,11 +7,16 @@ import optax
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
-from modrax.alg.base import Alg
+from modrax.alg.base import (
+    Alg,
+    AlgConfig,
+    OptimizerConfig,
+    create_optimizer,
+    update_network_minibatches,
+)
 from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
 from modrax.metrics import compute_training_metrics
 from modrax.network.base import Network
-from modrax.optimizer import Optimizer, update_network_minibatches
 from modrax.rollout import trajectory_rollout
 from modrax.utils import (
     batch_trajectories,
@@ -20,8 +25,9 @@ from modrax.utils import (
 
 
 @dataclass(frozen=True)
-class PQNConfig:
+class PQNConfig(AlgConfig):
     name: str = "PQN"
+    optimizer_cfg: OptimizerConfig = OptimizerConfig()
 
     gamma: float = 0.99
     lambd: float = 0.65
@@ -162,25 +168,24 @@ class PQNAlg(Alg):
         self,
         env: Env,
         network: Network,
-        optimizer: Optimizer,
         cfg: PQNConfig,
         key: Key[Array, ""],
     ):
         if not isinstance(env.action_spec, DiscreteActionSpec):
             raise ValueError("PQN requires a discrete action space")
 
-        super().__init__(env, network, optimizer, cfg)
-        self.total_steps = cfg.total_steps
+        super().__init__(env, network, cfg)
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps
-        self.num_epochs = self.total_steps // self.env_steps_per_epoch
+        self.num_epochs = cfg.total_steps // self.env_steps_per_epoch
         self.total_updates = compute_total_updates(cfg)
 
         self.eps_scheduler = optax.linear_schedule(
             cfg.start_eps, cfg.end_eps, int(cfg.eps_decay * self.num_epochs)
         )
 
+        optimizer = create_optimizer(network, cfg.optimizer_cfg, self.total_updates)
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
-        self.state = PQNState(nnx.split((self.network, self.optimizer)), env_state, 0)
+        self.state = PQNState(nnx.split((network, optimizer)), env_state, 0)
         self.loop = nnx.jit(self._loop)
 
     def _loop(self, state: PQNState, key):

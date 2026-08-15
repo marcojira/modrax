@@ -1,5 +1,5 @@
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import jax
@@ -7,17 +7,20 @@ import jax.numpy as jnp
 from flax import nnx, struct
 from jaxtyping import Array, Float, Key
 
-from modrax.alg.base import Alg
+from modrax.alg.base import Alg, AlgConfig, OptimizerConfig, create_optimizer
 from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import ContinuousActionSpec, Env, StateWithMetrics
 from modrax.metrics import finite_mean
-from modrax.network.base import Network
-from modrax.optimizer import Optimizer, OptimizerConfig, ema_update
+from modrax.network.base import Network, NetworkConfig
 from modrax.rollout import Transition, trajectory_rollout, trajectory_to_transitions
 
 
 @dataclass(frozen=True)
-class SACConfig:
+class SACConfig(AlgConfig):
+    critic_optimizer_cfg: OptimizerConfig = OptimizerConfig(learning_rate=1e-3)
+    actor_optimizer_cfg: OptimizerConfig = OptimizerConfig(learning_rate=1e-3)
+    alpha_optimizer_cfg: OptimizerConfig = OptimizerConfig(learning_rate=3e-4)
+
     init_buffer_size: int = int(5e3)
     buffer_size: int = int(1e6)
 
@@ -38,7 +41,7 @@ class SACConfig:
 
 
 @dataclass(frozen=True)
-class SACNetworkConfig:
+class SACNetworkConfig(NetworkConfig):
     running_norm: bool = True
     min_std: float = 0.001
     init_alpha: float = 1.0
@@ -74,32 +77,12 @@ class SACNetwork(Network):
         raise NotImplementedError
 
 
-@dataclass(frozen=True)
-class SACOptimizerConfig(OptimizerConfig):
-    q_optimizer_cfg: OptimizerConfig = field(
-        default_factory=lambda: OptimizerConfig(learning_rate=1e-3)
-    )
-    actor_optimizer_cfg: OptimizerConfig = field(
-        default_factory=lambda: OptimizerConfig(learning_rate=1e-3)
-    )
-    alpha_optimizer_cfg: OptimizerConfig = field(
-        default_factory=lambda: OptimizerConfig(learning_rate=3e-4)
-    )
-
-
-class SACOptimizer(Optimizer):
-    def __init__(self, actor: Actor, critic: Critic, log_alpha: LogAlpha, cfg: SACOptimizerConfig):
-        self.critic = Optimizer(cfg.q_optimizer_cfg, critic)
-        self.actor = Optimizer(cfg.actor_optimizer_cfg, actor)
-        self.alpha = Optimizer(cfg.alpha_optimizer_cfg, log_alpha)
-
-
 """ ALGORITHM """
 
 
 def value_update(
     network: SACNetwork,
-    optimizer: SACOptimizer,
+    optimizer: nnx.Optimizer,
     minibatch: Transition,
     cfg: SACConfig,
     key: Key[Array, ""],
@@ -137,7 +120,7 @@ def value_update(
     (loss, info), grads = nnx.value_and_grad(value_loss, has_aux=True)(
         network.critic, minibatch, key
     )
-    optimizer.critic.update(grads)
+    optimizer.update(grads)
     network.critic.eval()
 
     return loss, info
@@ -145,7 +128,7 @@ def value_update(
 
 def policy_update(
     network: SACNetwork,
-    optimizer: SACOptimizer,
+    optimizer: nnx.Optimizer,
     minibatch: Transition,
     cfg: SACConfig,
     key: Key[Array, ""],
@@ -162,7 +145,7 @@ def policy_update(
     (loss, info), grads = nnx.value_and_grad(policy_loss, has_aux=True)(
         network.actor, minibatch, key
     )
-    optimizer.actor.update(grads)
+    optimizer.update(grads)
     network.actor.eval()
 
     return loss, info
@@ -170,7 +153,7 @@ def policy_update(
 
 def alpha_update(
     network: SACNetwork,
-    optimizer: SACOptimizer,
+    optimizer: nnx.Optimizer,
     minibatch: Transition,
     target_entropy: float,
     cfg: SACConfig,
@@ -186,9 +169,24 @@ def alpha_update(
     (loss, info), grads = nnx.value_and_grad(alpha_loss, has_aux=True)(
         network.log_alpha, minibatch, key
     )
-    optimizer.alpha.update(grads)
+    optimizer.update(grads)
 
     return loss, info
+
+
+def ema_update(source: nnx.Module, target: nnx.Module, tau: float):
+    """Update target parameters with an exponential moving average of source parameters."""
+    source_params = nnx.state(source, nnx.Param)
+    target_params = nnx.state(target, nnx.Param)
+    new_target_params = jax.tree.map(
+        lambda source, target: tau * source + (1 - tau) * target,
+        source_params,
+        target_params,
+    )
+    nnx.update(target, new_target_params)
+
+    source_batch_stats = nnx.state(source, nnx.BatchStat)
+    nnx.update(target, source_batch_stats)
 
 
 @struct.dataclass
@@ -203,18 +201,20 @@ class SACAlg(Alg):
         self,
         env: Env,
         network: SACNetwork,
-        optimizer: SACOptimizer,
         alg_cfg: SACConfig,
         key: Key[Array, ""],
     ):
         if not isinstance(env.action_spec, ContinuousActionSpec):
             raise ValueError("SAC requires a continuous action space")
 
-        super().__init__(env, network, optimizer, alg_cfg)
-        self.total_steps = self.cfg.total_steps
+        super().__init__(env, network, alg_cfg)
 
         network.eval()
         self.target_entropy = -0.5 * math.prod(env.action_spec.shape)
+
+        critic_optimizer = create_optimizer(network.critic, alg_cfg.critic_optimizer_cfg)
+        actor_optimizer = create_optimizer(network.actor, alg_cfg.actor_optimizer_cfg)
+        alpha_optimizer = create_optimizer(network.log_alpha, alg_cfg.alpha_optimizer_cfg)
 
         # Generate transitions for initial buffer
         reset_key, rollout_key = jax.random.split(key)
@@ -231,12 +231,16 @@ class SACAlg(Alg):
         buffer_state = self.buffer.add(buffer_state, transitions)
 
         self.env_steps_per_epoch = alg_cfg.num_envs * alg_cfg.iterations_per_epoch
-        self.state = SACState(nnx.split((network, optimizer)), env_state, buffer_state)
+        self.state = SACState(
+            nnx.split((network, critic_optimizer, actor_optimizer, alpha_optimizer)),
+            env_state,
+            buffer_state,
+        )
         self.loop = nnx.scan(nnx.jit(self._loop))
 
     def _loop(self, state: SACState, key: Key[Array, ""]):
         env_state, buffer_state = state.env_state, state.buffer_state
-        network, optimizer = nnx.merge(*state.agent_state)
+        network, critic_optimizer, actor_optimizer, alpha_optimizer = nnx.merge(*state.agent_state)
         rollout_key, train_key = jax.random.split(key)
         metrics = {}
 
@@ -268,21 +272,22 @@ class SACAlg(Alg):
             # Losses
             if self.cfg.autotune:
                 alpha_loss, _ = alpha_update(
-                    network, optimizer, batch, self.target_entropy, self.cfg, alpha_key
+                    network, alpha_optimizer, batch, self.target_entropy, self.cfg, alpha_key
                 )
                 metrics["alpha_loss"] = alpha_loss
             metrics["log_alpha"] = jnp.array(network.log_alpha.param.value)
 
-            value_loss, _ = value_update(network, optimizer, batch, self.cfg, value_key)
+            value_loss, _ = value_update(network, critic_optimizer, batch, self.cfg, value_key)
             metrics["value_loss"] = value_loss
 
-            actor_loss, _ = policy_update(network, optimizer, batch, self.cfg, policy_key)
+            actor_loss, _ = policy_update(network, actor_optimizer, batch, self.cfg, policy_key)
             metrics["actor_loss"] = actor_loss
 
             # EMA
             ema_update(network.critic, network.critic_target, self.cfg.tau)
 
-        return SACState(nnx.split((network, optimizer)), env_state, buffer_state), metrics
+        agent_state = nnx.split((network, critic_optimizer, actor_optimizer, alpha_optimizer))
+        return SACState(agent_state, env_state, buffer_state), metrics
 
     def __call__(self, key: Key[Array, ""]):
         keys = jax.random.split(key, self.cfg.iterations_per_epoch)

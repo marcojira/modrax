@@ -17,7 +17,7 @@ class _Alg:
     def __init__(self):
         self.env = object()
         self.network = _Network()
-        self.total_steps = 1
+        self.cfg = SimpleNamespace(total_steps=1)
         self.env_steps_per_epoch = 1
         self.trajectories = object()
 

@@ -17,8 +17,6 @@ from modrax.alg.sac import (
     SACConfig,
     SACNetwork,
     SACNetworkConfig,
-    SACOptimizer,
-    SACOptimizerConfig,
 )
 from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
@@ -32,7 +30,6 @@ from modrax.training import TrainConfig, WandbConfig, train
 class MuJoCoSACConfig(TrainConfig):
     env_cfg: MuJoCoPlaygroundConfig = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
     network_cfg: SACNetworkConfig = SACNetworkConfig(running_norm=True)
-    optimizer_cfg: SACOptimizerConfig = SACOptimizerConfig()
     alg_cfg: SACConfig = SACConfig()
     wandb: WandbConfig = WandbConfig(enabled=True)
     eval_interval: int = 5
@@ -113,8 +110,7 @@ def main(cfg: MuJoCoSACConfig):
 
     env = MuJoCoPlaygroundEnv(cfg.env_cfg)
     network = MuJoCoSACNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
-    optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, cfg.optimizer_cfg)
-    alg = SACAlg(env, network, optimizer, cfg.alg_cfg, key=alg_key)
+    alg = SACAlg(env, network, cfg.alg_cfg, key=alg_key)
 
     train(alg, cfg, key=train_key)
 
