@@ -12,12 +12,11 @@ from modrax.metrics import compute_training_metrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer, update_network_minibatches
 from modrax.rollout import Trajectory, trajectory_rollout
-from modrax.types import Config
 from modrax.utils import batch_trajectories
 
 
 @dataclass(frozen=True)
-class PPOConfig(Config):
+class PPOConfig:
     name: str = "PPO"
 
     gamma: float = 0.99

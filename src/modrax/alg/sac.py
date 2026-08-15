@@ -14,11 +14,10 @@ from modrax.metrics import finite_mean
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer, OptimizerConfig, ema_update
 from modrax.rollout import Transition, trajectory_rollout, trajectory_to_transitions
-from modrax.types import Config
 
 
 @dataclass(frozen=True)
-class SACConfig(Config):
+class SACConfig:
     init_buffer_size: int = int(5e3)
     buffer_size: int = int(1e6)
 
@@ -39,7 +38,7 @@ class SACConfig(Config):
 
 
 @dataclass(frozen=True)
-class SACNetworkConfig(Config):
+class SACNetworkConfig:
     running_norm: bool = True
     min_std: float = 0.001
     init_alpha: float = 1.0

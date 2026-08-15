@@ -9,11 +9,10 @@ from flax import nnx
 from jaxtyping import Array, Key, Shaped
 
 from modrax.env.base import StateWithMetrics
-from modrax.types import Config
 
 
 @dataclass(frozen=True)
-class NetworkConfig(Config):
+class NetworkConfig:
     pass
 
 

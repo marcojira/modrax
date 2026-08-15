@@ -9,6 +9,7 @@ from flax import nnx, struct
 from jaxtyping import Array, Key
 
 from modrax.alg.base import Alg
+from modrax.cli import add_cli
 from modrax.env.base import Env, StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 from modrax.network import Network
@@ -16,18 +17,15 @@ from modrax.network.mlp import MLP
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
-from modrax.types import Config as BaseConfig
-from modrax.types import Shape
-from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
-class NetworkConfig(BaseConfig):
+class NetworkConfig:
     hidden_dims: tuple[int, ...] = (64, 64)
 
 
 @dataclass(frozen=True)
-class AlgConfig(BaseConfig):
+class AlgConfig:
     total_steps: int = 100_000
     num_envs: int = 16
     num_timesteps: int = 128
@@ -44,7 +42,7 @@ class Config(TrainConfig):
 
 
 class MyNetwork(Network):
-    def __init__(self, obs_shape: Shape, num_actions: int, cfg: NetworkConfig, rngs: nnx.Rngs):
+    def __init__(self, obs_shape: tuple[int, ...], num_actions: int, cfg: NetworkConfig, rngs: nnx.Rngs):
         self.model = MLP(
             math.prod(obs_shape),
             cfg.hidden_dims,

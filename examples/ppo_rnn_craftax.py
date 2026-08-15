@@ -8,6 +8,7 @@ from flax import nnx
 from jaxtyping import Array, Float, Key
 
 from modrax.alg.ppo import PPOAlg, PPOConfig, PPONetwork, PPONetworkOutput, compute_total_updates
+from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.craftax import CraftaxConfig, CraftaxEnv
 from modrax.network.mlp import MLP
@@ -15,12 +16,10 @@ from modrax.network.rnn import NnxRNN
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
-from modrax.types import Config, Shape
-from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
-class CraftaxRNNNetworkConfig(Config):
+class CraftaxRNNNetworkConfig:
     encoder_dim: int = 256
     rnn_hidden_dim: int = 256
     cell_type: str = "lstm"
@@ -59,7 +58,7 @@ class CraftaxRNNPPOConfig(TrainConfig):
 class CraftaxRNNNetwork(PPONetwork):
     def __init__(
         self,
-        obs_shape: Shape,
+        obs_shape: tuple[int, ...],
         num_actions: int,
         num_envs: int,
         cfg: CraftaxRNNNetworkConfig,

@@ -15,7 +15,6 @@ from modrax.logging import (
     pprint,
 )
 from modrax.optimizer import OptimizerConfig
-from modrax.types import Config
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -31,11 +30,9 @@ from modrax.network.base import Network
 
 
 @dataclass(frozen=True)
-class TrainConfig(Config):
+class TrainConfig:
     env_cfg: EnvConfig
-    network_cfg: Config
     optimizer_cfg: OptimizerConfig
-    alg_cfg: Config
 
     seed: int
 

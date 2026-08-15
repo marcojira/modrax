@@ -5,17 +5,16 @@ import jax.numpy as jnp
 from flax import nnx
 
 from modrax.alg.pqn import PQNAlg, PQNConfig, PQNNetwork, PQNNetworkOutput, compute_total_updates
+from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
 from modrax.optimizer import Optimizer, OptimizerConfig
 from modrax.policy import epsilon_greedy_policy
 from modrax.training import TrainConfig, WandbConfig, train
-from modrax.types import Config
-from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
-class MinAtarNetworkConfig(Config):
+class MinAtarNetworkConfig:
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
 

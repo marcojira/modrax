@@ -6,13 +6,11 @@ import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
 
-from modrax.types import Shape
-
 
 class RunningNorm(nnx.Module):
     """Normalizes inputs using running mean and variance."""
 
-    def __init__(self, input_shape: Shape | int, epsilon: float = 1e-8):
+    def __init__(self, input_shape: tuple[int, ...] | int, epsilon: float = 1e-8):
         self.input_dim = input_shape if isinstance(input_shape, int) else math.prod(input_shape)
         self.epsilon = epsilon
 

@@ -9,8 +9,6 @@ import numpy as np
 from flax import nnx
 from jaxtyping import Array, Bool, Float, Int, Key, Shaped
 
-from modrax.types import Config, Shape
-
 
 @dataclass(frozen=True)
 class DiscreteActionSpec:
@@ -28,7 +26,7 @@ ActionSpec = DiscreteActionSpec | ContinuousActionSpec
 
 
 @dataclass(frozen=True)
-class EnvConfig(Config):
+class EnvConfig:
     env_name: str = ""
     auto_reset: bool = True
     optimistic_reset: bool = False
@@ -65,7 +63,7 @@ class StepOutput(NamedTuple):
 
 
 class Env:
-    obs_shape: Shape
+    obs_shape: tuple[int, ...]
     action_spec: ActionSpec
     config: EnvConfig
 

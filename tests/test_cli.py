@@ -4,12 +4,11 @@ from dataclasses import dataclass
 
 import pytest
 
-from modrax.types import Config
-from modrax.utils import add_cli
+from modrax.cli import add_cli
 
 
 @dataclass(frozen=True)
-class SomeConfig(Config):
+class SomeConfig:
     learning_rate: float = 3e-4
 
 

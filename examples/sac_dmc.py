@@ -20,13 +20,12 @@ from modrax.alg.sac import (
     SACOptimizer,
     SACOptimizerConfig,
 )
+from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
 from modrax.network.mlp import MLP
 from modrax.network.running_norm import RunningNorm
 from modrax.training import TrainConfig, WandbConfig, train
-from modrax.types import Shape
-from modrax.utils import add_cli
 
 
 @dataclass(frozen=True)
@@ -42,7 +41,7 @@ class MuJoCoSACConfig(TrainConfig):
 
 
 class MLPActor(Actor):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
         self.fc1 = nnx.Linear(math.prod(obs_shape), 256, rngs=rngs)
         self.fc2 = nnx.Linear(256, 256, rngs=rngs)
         self.fc_mean = nnx.Linear(256, action_size, rngs=rngs)
@@ -73,7 +72,7 @@ class MLPActor(Actor):
 
 
 class MLPCritic(Critic):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
         flat_input_size = math.prod(obs_shape) + action_size
 
         self.soft_q_1 = MLP(
@@ -89,7 +88,7 @@ class MLPCritic(Critic):
 
 
 class MuJoCoSACNetwork(SACNetwork):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
         self.critic = MLPCritic(obs_shape, action_size, cfg, rngs)
         self.critic_target = nnx.clone(self.critic)
         self.actor = MLPActor(obs_shape, action_size, cfg, rngs)

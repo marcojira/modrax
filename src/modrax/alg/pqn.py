@@ -13,7 +13,6 @@ from modrax.metrics import compute_training_metrics
 from modrax.network.base import Network
 from modrax.optimizer import Optimizer, update_network_minibatches
 from modrax.rollout import trajectory_rollout
-from modrax.types import Config
 from modrax.utils import (
     batch_trajectories,
     batch_transitions,
@@ -21,7 +20,7 @@ from modrax.utils import (
 
 
 @dataclass(frozen=True)
-class PQNConfig(Config):
+class PQNConfig:
     name: str = "PQN"
 
     gamma: float = 0.99

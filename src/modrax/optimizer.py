@@ -8,11 +8,10 @@ from flax import nnx
 from jaxtyping import Array, Float
 
 from modrax.network.base import Network
-from modrax.types import Config
 
 
 @dataclass(frozen=True)
-class OptimizerConfig(Config):
+class OptimizerConfig:
     optimizer_type: Literal["adam", "adamw", "radam", "sgd", "rmsprop", "muon"] = "adam"
     weight_decay: float = 1e-5
     learning_rate: float = 3e-4
