@@ -13,7 +13,6 @@ from modrax.cli import add_cli
 from modrax.env.base import StateWithMetrics
 from modrax.env.craftax import CraftaxConfig, CraftaxEnv
 from modrax.network import NetworkConfig
-from modrax.network.mlp import MLP
 from modrax.network.rnn import NnxRNN
 from modrax.policy import softmax_policy
 from modrax.training import TrainConfig, WandbConfig, train
@@ -21,12 +20,10 @@ from modrax.training import TrainConfig, WandbConfig, train
 
 @dataclass(frozen=True)
 class CraftaxRNNNetworkConfig(NetworkConfig):
-    encoder_dim: int = 256
-    rnn_hidden_dim: int = 256
+    encoder_dim: int = 512
+    rnn_hidden_dim: int = 512
     cell_type: str = "lstm"
     num_rnn_layers: int = 1
-    policy_hidden_dims: tuple[int, ...] = (256, 256)
-    value_hidden_dims: tuple[int, ...] = (256, 256)
 
 
 @dataclass(frozen=True)
@@ -49,6 +46,7 @@ class CraftaxRNNPPOConfig(TrainConfig):
     )
     wandb: WandbConfig = WandbConfig(enabled=True, project="modrax")
     eval_interval: int = 100
+    eval_max_steps: int = 2500
     seed: int = 0
     save_gif_wandb: bool = True
     num_gif_trajectories: int = 2
@@ -65,7 +63,6 @@ class CraftaxRNNNetwork(PPONetwork):
     ):
         self.is_recurrent = True
 
-        relu = jax.nn.relu
         self.encoder = nnx.Linear(math.prod(obs_shape), cfg.encoder_dim, rngs=rngs)
         self.rnn = NnxRNN(
             input_dim=cfg.encoder_dim,
@@ -75,10 +72,16 @@ class CraftaxRNNNetwork(PPONetwork):
             rngs=rngs,
         )
         self.rnn.initialize_carry(num_envs)
-        self.policy_head = MLP(
-            cfg.rnn_hidden_dim, cfg.policy_hidden_dims, num_actions, relu, rngs=rngs
-        )
-        self.value_head = MLP(cfg.rnn_hidden_dim, cfg.value_hidden_dims, 1, relu, rngs=rngs)
+
+        self.policy_ln = nnx.LayerNorm(cfg.rnn_hidden_dim, rngs=rngs)
+        self.value_ln = nnx.LayerNorm(cfg.rnn_hidden_dim, rngs=rngs)
+        self.policy_head = nnx.Linear(cfg.rnn_hidden_dim, num_actions, rngs=rngs)
+        self.value_head = nnx.Linear(cfg.rnn_hidden_dim, 1, rngs=rngs)
+
+    def _apply_heads(self, x: Float[Array, "... D"]):
+        policy_logits = self.policy_head(self.policy_ln(x))
+        value = self.value_head(self.value_ln(x))
+        return policy_logits, value
 
     def train_forward(
         self, obs: Float[Array, "B T ..."], dones: Float[Array, "B T"], init_carry, saved_carry
@@ -86,8 +89,7 @@ class CraftaxRNNNetwork(PPONetwork):
         encoded = self.encoder(obs.reshape(*obs.shape[:2], -1))
         encoded = self.rnn.train_forward(encoded, dones, init_carry)
 
-        policy_logits = self.policy_head(encoded)
-        value = self.value_head(encoded)
+        policy_logits, value = self._apply_heads(encoded)
         return PPONetworkOutput(policy_logits, value, None)
 
     def policy(self, env_state: StateWithMetrics, key: Key[Array, ""]):
@@ -95,7 +97,7 @@ class CraftaxRNNNetwork(PPONetwork):
         encoded = self.encoder(obs)
         carry, out = self.rnn(encoded)
 
-        policy_logits, value = self.policy_head(out), self.value_head(out)
+        policy_logits, value = self._apply_heads(out)
         action = softmax_policy(policy_logits, env_state.action_mask, key)
         return action, PPONetworkOutput(policy_logits, value, carry)
 
