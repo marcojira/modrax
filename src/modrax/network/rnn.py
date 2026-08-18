@@ -76,10 +76,10 @@ class NnxRNN(nnx.Module):
         return jax.tree.map(lambda c: jnp.where(done[:, None], 0, c), carry)
 
     def reset(self):
-        self.carry.value = jax.tree.map(jnp.zeros_like, self.carry.value)
+        self.carry.set_value(jax.tree.map(jnp.zeros_like, self.carry.get_value()))
 
     def reset_episodes(self, done: Array):
-        self.carry.value = self._reset_carry(self.carry.value, done)
+        self.carry.set_value(self._reset_carry(self.carry.get_value(), done))
 
     def _step(self, carry, x: Float[Array, "B D"]):
         """Single forward step through all RNN layers."""
@@ -107,11 +107,11 @@ class NnxRNN(nnx.Module):
 
     def _eval_forward(self, x: Float[Array, "B D"]):
         """Single step without advancing stored carry."""
-        carry, out = self._step(self.carry.value, x)
+        carry, out = self._step(self.carry.get_value(), x)
         return carry, out
 
     def __call__(self, x: Float[Array, "B D"]):
         """Single eval step, advances stored carry. Returns (store_carry, out)."""
-        new_carry, out = self._step(self.carry.value, x)
-        self.carry.value = new_carry
+        new_carry, out = self._step(self.carry.get_value(), x)
+        self.carry.set_value(new_carry)
         return new_carry, out

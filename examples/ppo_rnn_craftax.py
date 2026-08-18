@@ -108,7 +108,7 @@ class CraftaxRNNNetwork(PPONetwork):
         self.rnn.reset_episodes(done)
 
     def get_carry(self):
-        return self.rnn.carry.value
+        return self.rnn.carry.get_value()
 
 
 @add_cli

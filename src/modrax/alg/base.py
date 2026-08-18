@@ -82,7 +82,7 @@ def create_optimizer(
         return jnp.array(0.0), {}
 
     _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
-    optimizer.update(grads)
+    optimizer.update(network, grads)
     return optimizer
 
 
@@ -100,7 +100,7 @@ def update_network_minibatches(
         network, optimizer = nnx.merge(graphdef, state)
 
         (loss, info), grads = nnx.value_and_grad(loss_fn, has_aux=True)(network, minibatch, config)
-        optimizer.update(grads)
+        optimizer.update(network, grads)
 
         graph_state = nnx.split((network, optimizer))
         return graph_state, (loss, info)

@@ -120,7 +120,7 @@ def value_update(
     (loss, info), grads = nnx.value_and_grad(value_loss, has_aux=True)(
         network.critic, minibatch, key
     )
-    optimizer.update(grads)
+    optimizer.update(network.critic, grads)
     network.critic.eval()
 
     return loss, info
@@ -145,7 +145,7 @@ def policy_update(
     (loss, info), grads = nnx.value_and_grad(policy_loss, has_aux=True)(
         network.actor, minibatch, key
     )
-    optimizer.update(grads)
+    optimizer.update(network.actor, grads)
     network.actor.eval()
 
     return loss, info
@@ -169,7 +169,7 @@ def alpha_update(
     (loss, info), grads = nnx.value_and_grad(alpha_loss, has_aux=True)(
         network.log_alpha, minibatch, key
     )
-    optimizer.update(grads)
+    optimizer.update(network.log_alpha, grads)
 
     return loss, info
 

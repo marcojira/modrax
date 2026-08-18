@@ -127,7 +127,7 @@ def log_trajectories(
     fps: int = 10,
 ) -> None:
     """Render trajectories and log them to W&B and/or save them as GIFs."""
-    if not (config.save_gif_local or config.save_gif_wandb):
+    if not (config.save_gif_local or (config.save_gif_wandb and config.wandb.enabled)):
         return
 
     rendered = render_trajectories(env, jax.tree.map(lambda x: x[:n_trajectories], trajectories))
