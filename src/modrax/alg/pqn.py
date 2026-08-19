@@ -164,6 +164,8 @@ class PQNState:
 
 
 class PQNAlg(Alg):
+    cfg: PQNConfig
+
     def __init__(
         self,
         env: Env,
@@ -186,9 +188,9 @@ class PQNAlg(Alg):
         optimizer = create_optimizer(network, cfg.optimizer_cfg, self.total_updates)
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PQNState(nnx.split((network, optimizer)), env_state, 0)
-        self.loop = nnx.jit(self._loop)
+        self.jitted_step = nnx.jit(self._step_fn)
 
-    def _loop(self, state: PQNState, key):
+    def _step_fn(self, state: PQNState, key):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
@@ -249,6 +251,6 @@ class PQNAlg(Alg):
 
         return PQNState(nnx.split((network, optimizer)), env_state, state.step + 1), metrics
 
-    def __call__(self, key):
-        self.state, metrics = self.loop(self.state, key)
+    def step(self, key):
+        self.state, metrics = self.jitted_step(self.state, key)
         return metrics

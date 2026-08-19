@@ -85,10 +85,24 @@ class MyAlg(Alg):
         optimizer = create_optimizer(network, cfg.optimizer_cfg)
         env_state = env.reset(jax.random.split(key, cfg.num_envs))
         self.state = MyAlgState(nnx.split((network, optimizer)), env_state, 0)
+        self.jitted_step = nnx.jit(self._step_fn)
 
-    def __call__(self, key: Key[Array, ""]) -> dict[str, float]:
-        """Run one training epoch and update ``self.state``."""
+    def _step_fn(
+        self, state: MyAlgState, key: Key[Array, ""]
+    ) -> tuple[MyAlgState, dict[str, float]]:
+        """Run one training epoch: collect data, update the network, return the new state."""
+        rollout_key, update_key = jax.random.split(key)
+        network, optimizer = nnx.merge(*state.agent_state)
+
+        # 1. Collect data from ``state.env_state`` with ``rollout_key``, keeping the new env state.
+        # 2. Update the network with ``update_key``, e.g. via ``update_network_minibatches``.
+        # 3. Return ``MyAlgState(nnx.split((network, optimizer)), env_state, state.step + 1)``
+        #    together with a metrics dict.
         raise NotImplementedError
+
+    def step(self, key: Key[Array, ""]) -> dict[str, float]:
+        self.state, metrics = self.jitted_step(self.state, key)
+        return metrics
 
 
 @add_cli

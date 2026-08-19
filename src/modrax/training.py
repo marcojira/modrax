@@ -68,7 +68,7 @@ def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
         key, epoch_key = jax.random.split(key)
 
         # Alg epoch
-        metrics = algorithm(epoch_key)
+        metrics = algorithm.step(epoch_key)
 
         # Metrics
         total_steps = epoch * algorithm.env_steps_per_epoch

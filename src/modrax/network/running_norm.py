@@ -34,9 +34,9 @@ class RunningNorm(nnx.Module):
             + delta**2 * self.count * batch_count / total_count
         )
 
-        self.count.value = total_count
-        self.mean.value = new_mean
-        self.var.value = m2 / total_count
+        self.count[...] = total_count
+        self.mean[...] = new_mean
+        self.var[...] = m2 / total_count
 
     def __call__(self, x: Float[Array, "B ..."]) -> Float[Array, "B D"]:
         x = x.reshape(x.shape[0], -1)

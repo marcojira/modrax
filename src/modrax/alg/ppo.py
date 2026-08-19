@@ -165,6 +165,8 @@ class PPOState:
 
 
 class PPOAlg(Alg):
+    cfg: PPOConfig
+
     def __init__(
         self,
         env: Env,
@@ -182,9 +184,9 @@ class PPOAlg(Alg):
         optimizer = create_optimizer(network, cfg.optimizer_cfg, compute_total_updates(cfg))
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
-        self.loop = nnx.jit(self._loop)
+        self.jitted_step = nnx.jit(self._step_fn)
 
-    def _loop(self, state: PPOState, key: Key[Array, ""]):
+    def _step_fn(self, state: PPOState, key: Key[Array, ""]):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
@@ -218,6 +220,6 @@ class PPOAlg(Alg):
 
         return PPOState(nnx.split((network, optimizer)), env_state, state.step + 1), metrics
 
-    def __call__(self, key: Key[Array, ""]):
-        self.state, metrics = self.loop(self.state, key)
+    def step(self, key: Key[Array, ""]):
+        self.state, metrics = self.jitted_step(self.state, key)
         return metrics

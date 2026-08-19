@@ -26,24 +26,6 @@ class OptimizerConfig:
     gradient_clip: float | None = None
 
 
-class Alg(ABC):
-    env_steps_per_epoch: int
-    state: Any
-
-    def __init__(self, env: Env, network: Network, cfg: AlgConfig):
-        self.env = env
-        self.network = network
-        self.cfg = cfg
-
-    @abstractmethod
-    def __call__(self, key: Key[Array, ""]) -> dict[str, float]:
-        pass
-
-    def get_network(self) -> Network:
-        """Return the network from the current algorithm state."""
-        return nnx.merge(*self.state.agent_state)[0]
-
-
 def create_optimizer(
     network: nnx.Module,
     config: OptimizerConfig,
@@ -114,3 +96,22 @@ def update_network_minibatches(
 
     nnx.update((network, optimizer), graph_state[-1])
     return loss, infos
+
+
+class Alg(ABC):
+    env_steps_per_epoch: int
+    state: Any
+
+    def __init__(self, env: Env, network: Network, cfg: AlgConfig):
+        self.env = env
+        self.network = network
+        self.cfg = cfg
+
+    @abstractmethod
+    def step(self, key: Key[Array, ""]) -> dict[str, float]:
+        """Advance the algorithm by one training iteration."""
+        pass
+
+    def get_network(self) -> Network:
+        """Return the network from the current algorithm state."""
+        return nnx.merge(*self.state.agent_state)[0]

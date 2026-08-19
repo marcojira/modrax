@@ -29,7 +29,7 @@ from modrax.training import TrainConfig, WandbConfig, train
 @dataclass(frozen=True)
 class MuJoCoSACConfig(TrainConfig):
     env_cfg: MuJoCoPlaygroundConfig = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
-    network_cfg: SACNetworkConfig = SACNetworkConfig(running_norm=True)
+    network_cfg: SACNetworkConfig = SACNetworkConfig(use_running_norm=True)
     alg_cfg: SACConfig = SACConfig()
     wandb: WandbConfig = WandbConfig(enabled=True)
     eval_interval: int = 5
@@ -38,7 +38,9 @@ class MuJoCoSACConfig(TrainConfig):
 
 
 class MLPActor(Actor):
-    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         self.fc1 = nnx.Linear(math.prod(obs_shape), 256, rngs=rngs)
         self.fc2 = nnx.Linear(256, 256, rngs=rngs)
         self.fc_mean = nnx.Linear(256, action_size, rngs=rngs)
@@ -69,7 +71,9 @@ class MLPActor(Actor):
 
 
 class MLPCritic(Critic):
-    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         flat_input_size = math.prod(obs_shape) + action_size
 
         self.soft_q_1 = MLP(
@@ -85,13 +89,15 @@ class MLPCritic(Critic):
 
 
 class MuJoCoSACNetwork(SACNetwork):
-    def __init__(self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         self.critic = MLPCritic(obs_shape, action_size, cfg, rngs)
         self.critic_target = nnx.clone(self.critic)
         self.actor = MLPActor(obs_shape, action_size, cfg, rngs)
         self.log_alpha = LogAlpha(math.log(cfg.init_alpha))
 
-        self.running_norm = RunningNorm(obs_shape) if cfg.running_norm else lambda x: x
+        self.running_norm = RunningNorm(obs_shape) if cfg.use_running_norm else lambda x: x
 
     def policy(self, env_state: StateWithMetrics, key):
         obs = self.running_norm(env_state.obs)
@@ -108,8 +114,11 @@ def main(cfg: MuJoCoSACConfig):
     key = jax.random.key(cfg.seed)
     network_key, alg_key, train_key = jax.random.split(key, 3)
 
+    # Init objects
     env = MuJoCoPlaygroundEnv(cfg.env_cfg)
-    network = MuJoCoSACNetwork(env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key))
+    network = MuJoCoSACNetwork(
+        env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key)
+    )
     alg = SACAlg(env, network, cfg.alg_cfg, key=alg_key)
 
     train(alg, cfg, key=train_key)

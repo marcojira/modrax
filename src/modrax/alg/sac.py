@@ -12,6 +12,7 @@ from modrax.buffer import BufferState, ReplayBuffer
 from modrax.env.base import ContinuousActionSpec, Env, StateWithMetrics
 from modrax.metrics import finite_mean
 from modrax.network.base import Network, NetworkConfig
+from modrax.network.running_norm import RunningNorm
 from modrax.rollout import Transition, trajectory_rollout, trajectory_to_transitions
 
 
@@ -42,7 +43,7 @@ class SACConfig(AlgConfig):
 
 @dataclass(frozen=True)
 class SACNetworkConfig(NetworkConfig):
-    running_norm: bool = True
+    use_running_norm: bool = True
     min_std: float = 0.001
     init_alpha: float = 1.0
 
@@ -106,7 +107,7 @@ def value_update(
 
         q1, q2 = network.critic_target.get_qs(next_obs, next_action)
         min_q = jnp.minimum(q1, q2)
-        min_q_next_target = min_q - jnp.exp(network.log_alpha.param.value) * next_action_log_prob
+        min_q_next_target = min_q - jnp.exp(network.log_alpha.param[...]) * next_action_log_prob
         next_q_value = rewards + (1 - dones) * cfg.gamma * min_q_next_target
 
         q1, q2 = critic.get_qs(obs, actions)
@@ -138,7 +139,7 @@ def policy_update(
         sample_act, log_pi = actor.get_action(obs, key)
         qf1_act, qf2_act = network.critic.get_qs(obs, sample_act)
         min_qf_act = jnp.minimum(qf1_act, qf2_act)
-        actor_loss = ((jnp.exp(network.log_alpha.param.value) * log_pi) - min_qf_act).mean()
+        actor_loss = ((jnp.exp(network.log_alpha.param[...]) * log_pi) - min_qf_act).mean()
         return actor_loss, {}
 
     network.actor.train()
@@ -163,7 +164,7 @@ def alpha_update(
         obs = network.running_norm(batch.obs)
         _, log_pi = network.actor.get_action(obs, key)
         log_pi = jax.lax.stop_gradient(log_pi)
-        alpha_loss = (-jnp.exp(log_alpha.param.value) * (log_pi + target_entropy)).mean()
+        alpha_loss = (-jnp.exp(log_alpha.param[...]) * (log_pi + target_entropy)).mean()
         return alpha_loss, {}
 
     (loss, info), grads = nnx.value_and_grad(alpha_loss, has_aux=True)(
@@ -197,6 +198,8 @@ class SACState:
 
 
 class SACAlg(Alg):
+    cfg: SACConfig
+
     def __init__(
         self,
         env: Env,
@@ -236,9 +239,9 @@ class SACAlg(Alg):
             env_state,
             buffer_state,
         )
-        self.loop = nnx.scan(nnx.jit(self._loop))
+        self.jitted_step = nnx.scan(nnx.jit(self._step_fn))
 
-    def _loop(self, state: SACState, key: Key[Array, ""]):
+    def _step_fn(self, state: SACState, key: Key[Array, ""]):
         env_state, buffer_state = state.env_state, state.buffer_state
         network, critic_optimizer, actor_optimizer, alpha_optimizer = nnx.merge(*state.agent_state)
         rollout_key, train_key = jax.random.split(key)
@@ -251,7 +254,7 @@ class SACAlg(Alg):
         buffer_state = self.buffer.add(buffer_state, transitions)
 
         # Update running normalization statistics of observations
-        if network.running_norm:
+        if isinstance(network.running_norm, RunningNorm):
             network.running_norm.update(transitions.obs)
 
         # Record trajectory metrics
@@ -275,7 +278,7 @@ class SACAlg(Alg):
                     network, alpha_optimizer, batch, self.target_entropy, self.cfg, alpha_key
                 )
                 metrics["alpha_loss"] = alpha_loss
-            metrics["log_alpha"] = jnp.array(network.log_alpha.param.value)
+            metrics["log_alpha"] = jnp.array(network.log_alpha.param[...])
 
             value_loss, _ = value_update(network, critic_optimizer, batch, self.cfg, value_key)
             metrics["value_loss"] = value_loss
@@ -289,9 +292,9 @@ class SACAlg(Alg):
         agent_state = nnx.split((network, critic_optimizer, actor_optimizer, alpha_optimizer))
         return SACState(agent_state, env_state, buffer_state), metrics
 
-    def __call__(self, key: Key[Array, ""]):
+    def step(self, key: Key[Array, ""]):
         keys = jax.random.split(key, self.cfg.iterations_per_epoch)
-        self.state, metrics = self.loop(self.state, keys)
+        self.state, metrics = self.jitted_step(self.state, keys)
         metrics = {k: finite_mean(v) for k, v in metrics.items()}
 
         return metrics
