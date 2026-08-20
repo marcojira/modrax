@@ -1,9 +1,9 @@
 """Test MuJoCo Playground environment wrapper."""
 
 import pytest
-from helpers import run_env_test
 
 from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
+from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "CartpoleBalance",

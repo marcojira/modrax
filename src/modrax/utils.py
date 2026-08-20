@@ -1,13 +1,7 @@
 """Utility functions."""
 
-from typing import Any, Callable
-
 import jax
-from flax import nnx
 from jaxtyping import Array, Key, PyTree, Shaped
-
-from modrax.network.base import Network
-from modrax.optimizer import Optimizer
 
 
 def batch_trajectories(
@@ -47,9 +41,3 @@ def batch_transitions(
         lambda x: x.reshape(num_batches, minibatch_size, *x.shape[1:]), shuffled_data
     )  # Extra dimension to match train_forward requirements
     return minibatches
-
-
-def update_network(network: Network, optimizer: Optimizer, data: Any, loss_fn: Callable, config):
-    (loss, info), grads = nnx.value_and_grad(loss_fn, has_aux=True)(network, data, config)
-    optimizer.update(grads)
-    return loss, info

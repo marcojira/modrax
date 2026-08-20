@@ -1,8 +1,7 @@
 """Test optimistic resets for PGX environments."""
 
-from helpers import run_env_test
-
 from modrax.env.pgx import PGXConfig, PGXEnv
+from tests.env.helpers import run_env_test
 
 
 def test_pgx_optimistic_reset():

@@ -1,9 +1,9 @@
 """Test PGX environment wrapper."""
 
 import pytest
-from helpers import run_env_test
 
 from modrax.env.pgx import PGXConfig, PGXEnv
+from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "tic_tac_toe",

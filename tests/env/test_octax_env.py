@@ -1,9 +1,9 @@
 """Test Octax environment wrapper."""
 
 import pytest
-from helpers import run_env_test
 
 from modrax.env.octax import OctaxConfig, OctaxEnv
+from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "tetris",

@@ -3,10 +3,10 @@
 import jax
 import jax.numpy as jnp
 import pytest
-from helpers import run_env_test
 
 from modrax.env import ContinuousActionSpec, DiscreteActionSpec
 from modrax.env.gymnax import GymnaxConfig, GymnaxEnv
+from tests.env.helpers import run_env_test
 
 TEST_ENVS = [
     "CartPole-v1",

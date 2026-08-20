@@ -16,6 +16,10 @@ from modrax.training import TrainConfig, WandbConfig, train
 
 @dataclass(frozen=True)
 class MinAtarNetworkConfig(NetworkConfig):
+    conv_features: int = 16
+    kernel_size: tuple[int, int] = (3, 3)
+    strides: tuple[int, int] = (1, 1)
+    hidden_dim: int = 128
     norm_type: str = "layer_norm"  # "layer_norm" | "batch_norm" | "none"
     norm_input: bool = False
 
@@ -41,32 +45,34 @@ class MinAtarNetwork(PQNNetwork):
         self.cfg = cfg
         self.eps = nnx.Variable(jnp.array(1.0))
         h, w, in_channels = obs_shape
+        conv_h = (h - cfg.kernel_size[0]) // cfg.strides[0] + 1
+        conv_w = (w - cfg.kernel_size[1]) // cfg.strides[1] + 1
 
         self.conv = nnx.Conv(
             in_channels,
-            16,
-            kernel_size=(3, 3),
-            strides=(1, 1),
+            cfg.conv_features,
+            kernel_size=cfg.kernel_size,
+            strides=cfg.strides,
             padding="VALID",
             kernel_init=nnx.initializers.he_normal(),
             rngs=rngs,
         )
         self.dense = nnx.Linear(
-            (h - 2) * (w - 2) * 16,
-            128,
+            conv_h * conv_w * cfg.conv_features,
+            cfg.hidden_dim,
             kernel_init=nnx.initializers.he_normal(),
             rngs=rngs,
         )
-        self.output = nnx.Linear(128, action_size, rngs=rngs)
+        self.output = nnx.Linear(cfg.hidden_dim, action_size, rngs=rngs)
 
         self.input_norm = nnx.BatchNorm(in_channels, rngs=rngs) if cfg.norm_input else None
 
         if cfg.norm_type == "layer_norm":
-            self.norm1 = nnx.LayerNorm(16, rngs=rngs)
-            self.norm2 = nnx.LayerNorm(128, rngs=rngs)
+            self.norm1 = nnx.LayerNorm(cfg.conv_features, rngs=rngs)
+            self.norm2 = nnx.LayerNorm(cfg.hidden_dim, rngs=rngs)
         elif cfg.norm_type == "batch_norm":
-            self.norm1 = nnx.BatchNorm(16, rngs=rngs)
-            self.norm2 = nnx.BatchNorm(128, rngs=rngs)
+            self.norm1 = nnx.BatchNorm(cfg.conv_features, rngs=rngs)
+            self.norm2 = nnx.BatchNorm(cfg.hidden_dim, rngs=rngs)
         else:
             self.norm1 = self.norm2 = None
 
