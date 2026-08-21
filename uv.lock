@@ -3645,7 +3645,7 @@ wheels = [
 [[package]]
 name = "sequax"
 version = "0.1.0"
-source = { git = "https://github.com/marcojira/sequax.git#d008e97f4a0b09e462cc8ba5bac3fd0c02c75661" }
+source = { git = "https://github.com/marcojira/sequax.git#de4e5fd3c346b8490676c19cb5f7684e3c24c1fd" }
 dependencies = [
     { name = "flax", version = "0.12.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "flax", version = "0.12.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },

@@ -3,10 +3,18 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from jaxtyping import Array, Key
+import jax
+from jaxtyping import Array, Float, Key
 from sequax import AMPSequence, BitSequence, GFPSequence, UTRSequence
 
-from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StepOutput
+from modrax.env.base import (
+    DiscreteActionSpec,
+    Env,
+    EnvConfig,
+    State,
+    StateWithMetrics,
+    StepOutput,
+)
 
 TASKS = {
     "BitSequence": BitSequence,
@@ -19,15 +27,21 @@ TASKS = {
 @dataclass(frozen=True)
 class SequaxConfig(EnvConfig):
     env_name: Literal["BitSequence", "AMP", "GFP", "UTR"] = "BitSequence"
+    min_length: int | None = None  # Only AMP has a variable minimum length
 
 
 class SequaxEnv(Env):
     def __init__(self, config: SequaxConfig):
+        kwargs = {} if config.min_length is None else {"min_length": config.min_length}
+
         # The biological tasks load their bundled reward proxy checkpoint here
-        self._env = TASKS[config.env_name]()
+        self._env = TASKS[config.env_name](**kwargs)
 
         # Observations are the token sequence built so far, padded to a fixed length
         self.obs_shape = self._env.obs_shape
+        self.pad_token = self._env.pad_token_id  # Networks need it to mask padded positions
+
+        # Every token is an action, so the action count is also the vocabulary size
         self.action_spec = DiscreteActionSpec(self._env.num_actions)
 
         super().__init__(config)
@@ -62,3 +76,7 @@ class SequaxEnv(Env):
         )
 
         return step_output, new_state
+
+    def terminal_reward(self, state: StateWithMetrics) -> Float[Array, " B"]:
+        """Score finished sequences; sequax scores episodes here rather than in step()."""
+        return jax.vmap(self._env.terminal_reward)(state.env_state)
