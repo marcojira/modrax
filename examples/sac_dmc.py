@@ -1,5 +1,6 @@
 import math
 import os
+from dataclasses import dataclass
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 
@@ -16,18 +17,30 @@ from modrax.alg.sac import (
     SACConfig,
     SACNetwork,
     SACNetworkConfig,
-    SACOptimizer,
-    SACOptimizerConfig,
 )
-from modrax.env import Env, MuJoCoPlaygroundConfig
+from modrax.cli import add_cli
+from modrax.env.base import StateWithMetrics
+from modrax.env.mujoco_playground import MuJoCoPlaygroundConfig, MuJoCoPlaygroundEnv
 from modrax.network.mlp import MLP
 from modrax.network.running_norm import RunningNorm
-from modrax.training import TrainConfig, train
-from modrax.types import Shape
+from modrax.training import TrainConfig, WandbConfig, train
+
+
+@dataclass(frozen=True)
+class MuJoCoSACConfig(TrainConfig):
+    env_cfg: MuJoCoPlaygroundConfig = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
+    network_cfg: SACNetworkConfig = SACNetworkConfig(use_running_norm=True)
+    alg_cfg: SACConfig = SACConfig()
+    wandb: WandbConfig = WandbConfig(enabled=True)
+    eval_interval: int = 5
+    seed: int = 0
+    save_gif_wandb: bool = True
 
 
 class MLPActor(Actor):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         self.fc1 = nnx.Linear(math.prod(obs_shape), 256, rngs=rngs)
         self.fc2 = nnx.Linear(256, 256, rngs=rngs)
         self.fc_mean = nnx.Linear(256, action_size, rngs=rngs)
@@ -58,7 +71,9 @@ class MLPActor(Actor):
 
 
 class MLPCritic(Critic):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         flat_input_size = math.prod(obs_shape) + action_size
 
         self.soft_q_1 = MLP(
@@ -74,45 +89,39 @@ class MLPCritic(Critic):
 
 
 class MuJoCoSACNetwork(SACNetwork):
-    def __init__(self, obs_shape: Shape, action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs):
+    def __init__(
+        self, obs_shape: tuple[int, ...], action_size: int, cfg: SACNetworkConfig, rngs: nnx.Rngs
+    ):
         self.critic = MLPCritic(obs_shape, action_size, cfg, rngs)
         self.critic_target = nnx.clone(self.critic)
         self.actor = MLPActor(obs_shape, action_size, cfg, rngs)
         self.log_alpha = LogAlpha(math.log(cfg.init_alpha))
 
-        self.running_norm = RunningNorm(obs_shape) if cfg.running_norm else lambda x: x
+        self.running_norm = RunningNorm(obs_shape) if cfg.use_running_norm else lambda x: x
 
-    def get_action(self, obs: Float[Array, "B D"], key: Key[Array, ""]):
-        obs = self.running_norm(obs)
+    def policy(self, env_state: StateWithMetrics, key):
+        obs = self.running_norm(env_state.obs)
         return self.actor.get_action(obs, key)
 
+    def eval_policy(self, env_state: StateWithMetrics, key):
+        obs = self.running_norm(env_state.obs)
+        mean, _ = self.actor(obs)
+        return jnp.tanh(mean), None
 
-def main():
-    env_config = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
-    network_config = SACNetworkConfig(running_norm=True)
-    optimizer_config = SACOptimizerConfig()
-    alg_config = SACConfig(num_gen_steps=1000)
-    train_config = TrainConfig(
-        seed=0,
-        env_config=env_config,
-        network_config=network_config,
-        optimizer_config=optimizer_config,
-        alg_config=alg_config,
-        total_steps=100_000_000,
-        save_path=None,
-    )
 
-    env = Env(env_config)
+@add_cli
+def main(cfg: MuJoCoSACConfig):
+    key = jax.random.key(cfg.seed)
+    network_key, alg_key, train_key = jax.random.split(key, 3)
+
+    # Init objects
+    env = MuJoCoPlaygroundEnv(cfg.env_cfg)
     network = MuJoCoSACNetwork(
-        env.obs_shape, env.action_size, network_config, nnx.Rngs(train_config.seed)
+        env.obs_shape, env.action_size, cfg.network_cfg, nnx.Rngs(network_key)
     )
-    optimizer = SACOptimizer(network.actor, network.critic, network.log_alpha, optimizer_config)
-    alg = SACAlg(
-        env, network, optimizer, alg_config, jax.random.key(train_config.seed)
-    )
+    alg = SACAlg(env, network, cfg.alg_cfg, key=alg_key)
 
-    trained_network = train(env, network, optimizer, alg, train_config)
-    return trained_network
+    train(alg, cfg, key=train_key)
 
 
 if __name__ == "__main__":

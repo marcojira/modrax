@@ -1,6 +1,18 @@
 # Modrax
 An easy-to-use, performant RL library based on Jax and NNX.
 
+## Design
+
+Modrax is organized around three explicit, composable objects:
+
+- **Environment** defines interaction, observations, and the action space.
+- **Network** defines the policy or value model and owns its learned state.
+- **Algorithm** combines the environment and network, implements the learning procedure, and owns
+  its optimization strategy and state.
+
+Keeping these responsibilities separate makes each object independently replaceable and keeps
+experiment setup explicit.
+
 ## Quick start
 ```bash
 git clone https://github.com/marcojira/modrax.git

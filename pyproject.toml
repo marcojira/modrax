@@ -7,41 +7,46 @@ name = "modrax"
 version = "0.1.0"
 description = "A modular JAX reinforcement learning framework with composable components"
 readme = "README.md"
-requires-python = ">=3.10"
-license = {text = "MIT"}
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Marco Jiralerspong"}
 ]
 dependencies = [
     "jax[cuda]",
-    "jaxlib",
     "flax",
     "optax",
     "orbax-checkpoint",
-    "chex",
     "numpy",
-    "typing-extensions",
-    "pydantic",
     "jaxtyping",
-    "requests",
-    "opencv-python",
+    "imageio",
+    "rich",
+    "tqdm",
     "wandb[media]",
-    # Envs
-    "craftax",
-    "gymnax",
-    "jumanji",
-    # "octax", Needs to be installed from source
-    "pgx",
-    "playground",
+    "simple-parsing>=0.1.8",
+    "rich-argparse>=1.7.2",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "mypy",
+craftax = ["craftax"]
+gymnax = ["gymnax", "matplotlib"]
+octax = ["octax"]
+pgx = ["pgx"]
+mujoco = ["playground"]
+sequax = ["sequax @ git+https://github.com/marcojira/sequax.git"]
+all = [
+    "craftax",
+    "gymnax",
+    "matplotlib",
+    "octax",
+    "pgx",
+    "playground",
+    "sequax"
 ]
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

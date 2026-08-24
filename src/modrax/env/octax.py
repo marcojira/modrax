@@ -8,10 +8,10 @@ import numpy as np
 from jaxtyping import Array, Key
 from octax.environments import create_environment  # type: ignore
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class OctaxConfig(EnvConfig):
     """Configuration for Octax environments."""
 
@@ -47,17 +47,23 @@ class OctaxEnv(Env):
 
         dummy_key = jax.random.key(0)
         _, dummy_obs, _ = self._env.reset(dummy_key)
-        self.obs_shape = dummy_obs.shape
-        self.action_size = self._env.num_actions
+        self.obs_shape = self._transpose_obs(dummy_obs).shape
+        self.action_spec = DiscreteActionSpec(self._env.num_actions)
 
         super().__init__(config)
+
+    @staticmethod
+    def _transpose_obs(obs: Array) -> Array:
+        # (frames, W, H) -> (H, W, frames) so frame stack acts as channels
+        # under the (H, W, C) layout the networks expect.
+        return jnp.transpose(obs, (2, 1, 0))
 
     def _inner_reset_fn(self, key: Key[Array, ""]) -> State:
         env_state, obs, info = self._env.reset(key)
 
         return State(
             env_state=env_state,
-            obs=obs,
+            obs=self._transpose_obs(obs),
             action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
@@ -75,7 +81,7 @@ class OctaxEnv(Env):
         )
         new_state = State(
             env_state=next_env_state,
-            obs=next_obs,
+            obs=self._transpose_obs(next_obs),
             action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
         )
 
@@ -85,30 +91,21 @@ class OctaxEnv(Env):
         """
         Render Octax environment observation.
         Converts boolean observation to RGB image where False=white and True=black.
-        For frameskipped observations (4 x W x H), takes the most recent frame.
+        For frame-stacked observations (H x W x 4), takes the most recent frame.
         """
-        obs = state.obs
+        obs = np.array(state.obs)
 
-        # If observation has multiple frames (frameskip), take the most recent one
         if obs.ndim == 3:
-            obs = obs[-1]  # Take last frame: (W, H)
+            obs = obs[..., -1]  # Take last frame: (H, W)
 
-        # Transpose to (H, W) for proper display
-        obs = obs.T
-
-        # Convert boolean to grayscale: False -> 255 (white), True -> 0 (black)
         grayscale = np.where(obs, 0, 255).astype(np.uint8)
-
-        rgb_array = np.stack([grayscale, grayscale, grayscale], axis=-1)
-
-        return rgb_array
+        return np.stack([grayscale, grayscale, grayscale], axis=-1)
 
     def batch_render(self, states: StateWithMetrics) -> np.ndarray:
-        obs = np.array(states.obs)  # (B, [4,] W, H)
+        obs = np.array(states.obs)  # (B, H, W, 4)
 
         if obs.ndim == 4:
-            obs = obs[:, -1]  # (B, W, H)
+            obs = obs[..., -1]  # (B, H, W)
 
-        obs = obs.transpose(0, 2, 1)  # (B, H, W)
         grayscale = np.where(obs, 0, 255).astype(np.uint8)
         return np.stack([grayscale, grayscale, grayscale], axis=-1)  # (B, H, W, 3)

@@ -21,8 +21,8 @@ class MLP(nnx.Module):
         self.layer_norm = layer_norm
 
         # Build layers
-        self.layers = []
-        self.layer_norms = []
+        self.layers = nnx.List([])
+        self.layer_norms = nnx.List([])
         layer_sizes = [input_dim] + list(hidden_dims)
 
         for i in range(len(layer_sizes) - 1):

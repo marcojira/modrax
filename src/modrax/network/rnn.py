@@ -27,11 +27,13 @@ class NnxRNN(nnx.Module):
         self.activation_fn = activation_fn
         self.optimized_lstm = optimized_lstm
         self.residual = residual
+        self.rngs = rngs
 
         # TODO: VMAP this
-        self.cells = [self._create_cell(input_dim, output_dim, rngs)] + [
-            self._create_cell(output_dim, output_dim, rngs) for _ in range(num_layers - 1)
-        ]
+        self.cells = nnx.List(
+            [self._create_cell(input_dim, output_dim, rngs)]
+            + [self._create_cell(output_dim, output_dim, rngs) for _ in range(num_layers - 1)]
+        )
 
     def _create_cell(self, in_features: int, output_dim: int, rngs: nnx.Rngs):
         if self.cell_type == "lstm":
@@ -64,14 +66,20 @@ class NnxRNN(nnx.Module):
 
     def initialize_carry(self, batch_size: int):
         self.carry = nnx.Variable(
-            [cell.initialize_carry((batch_size, cell.in_features)) for cell in self.cells]
+            [
+                cell.initialize_carry((batch_size, cell.in_features), rngs=self.rngs)
+                for cell in self.cells
+            ]
         )
 
     def _reset_carry(self, carry, done):
         return jax.tree.map(lambda c: jnp.where(done[:, None], 0, c), carry)
 
-    def reset(self, done: Float[Array, " B"]):
-        self.carry.value = self._reset_carry(self.carry.value, done)
+    def reset(self):
+        self.carry.set_value(jax.tree.map(jnp.zeros_like, self.carry.get_value()))
+
+    def reset_episodes(self, done: Array):
+        self.carry.set_value(self._reset_carry(self.carry.get_value(), done))
 
     def _step(self, carry, x: Float[Array, "B D"]):
         """Single forward step through all RNN layers."""
@@ -99,11 +107,11 @@ class NnxRNN(nnx.Module):
 
     def _eval_forward(self, x: Float[Array, "B D"]):
         """Single step without advancing stored carry."""
-        carry, out = self._step(self.carry.value, x)
+        carry, out = self._step(self.carry.get_value(), x)
         return carry, out
 
     def __call__(self, x: Float[Array, "B D"]):
         """Single eval step, advances stored carry. Returns (store_carry, out)."""
-        new_carry, out = self._step(self.carry.value, x)
-        self.carry.value = new_carry
+        new_carry, out = self._step(self.carry.get_value(), x)
+        self.carry.set_value(new_carry)
         return new_carry, out

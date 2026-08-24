@@ -3,27 +3,27 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-import optax
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
-from modrax.alg.base import Alg
-from modrax.env.base import Env, StateWithMetrics
-from modrax.network.base import Network
-from modrax.optimizer import Optimizer
-from modrax.rollout.eval_rollout import eval_rollout
-from modrax.rollout.trajectory_rollout import Trajectory, trajectory_rollout
-from modrax.types import Config
-from modrax.utils import (
-    compute_training_metrics,
-    make_trajectory_minibatches,
+from modrax.alg.base import (
+    Alg,
+    AlgConfig,
+    OptimizerConfig,
+    create_optimizer,
     update_network_minibatches,
 )
+from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
+from modrax.metrics import compute_training_metrics
+from modrax.network.base import Network
+from modrax.rollout import Trajectory, trajectory_rollout
+from modrax.utils import batch_trajectories
 
 
-@dataclass
-class PPOConfig(Config):
+@dataclass(frozen=True)
+class PPOConfig(AlgConfig):
     name: str = "PPO"
+    optimizer_cfg: OptimizerConfig = OptimizerConfig()
 
     gamma: float = 0.99
     gae_lambda: float = 0.95
@@ -165,24 +165,28 @@ class PPOState:
 
 
 class PPOAlg(Alg):
+    cfg: PPOConfig
+
     def __init__(
         self,
         env: Env,
         network: Network,
-        optimizer: Optimizer,
         cfg: PPOConfig,
         key: Key[Array, ""],
     ):
-        super().__init__(env, network, optimizer, cfg, key)
-        self.total_steps = cfg.total_steps
-        self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
-        self.num_epochs = self.total_steps // self.env_steps_per_epoch
+        if not isinstance(env.action_spec, DiscreteActionSpec):
+            raise ValueError("PPO requires a discrete action space")
 
+        super().__init__(env, network, cfg)
+        self.env_steps_per_epoch = cfg.num_envs * cfg.num_gen_steps
+        self.num_epochs = cfg.total_steps // self.env_steps_per_epoch
+
+        optimizer = create_optimizer(network, cfg.optimizer_cfg, compute_total_updates(cfg))
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
         self.state = PPOState(nnx.split((network, optimizer)), env_state, 0)
-        self.loop = nnx.jit(self._loop)
+        self.jitted_step = nnx.jit(self._step_fn)
 
-    def _loop(self, state: PPOState, key: Key[Array, ""]):
+    def _step_fn(self, state: PPOState, key: Key[Array, ""]):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
@@ -206,7 +210,7 @@ class PPOAlg(Alg):
         epoch_keys = jax.random.split(update_key, self.cfg.num_updates)
         for epoch_key in epoch_keys:
             minibatch_size = self.cfg.num_envs // self.cfg.num_minibatches
-            minibatches = make_trajectory_minibatches(all_data, epoch_key, minibatch_size)
+            minibatches = batch_trajectories(all_data, epoch_key, minibatch_size)
             loss, infos = update_network_minibatches(
                 network, optimizer, minibatches, ppo_loss, self.cfg
             )
@@ -216,15 +220,6 @@ class PPOAlg(Alg):
 
         return PPOState(nnx.split((network, optimizer)), env_state, state.step + 1), metrics
 
-    def __call__(self, key: Key[Array, ""]):
-        self.state, metrics = self.loop(self.state, key)
+    def step(self, key: Key[Array, ""]):
+        self.state, metrics = self.jitted_step(self.state, key)
         return metrics
-
-    def eval(self, key):
-        network, _ = nnx.merge(*self.state.agent_state)
-        network = nnx.clone(network)
-
-        if network.is_recurrent:
-            network.reset(jnp.ones(self.cfg.num_envs))
-
-        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=2000)

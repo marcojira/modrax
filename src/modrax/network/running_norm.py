@@ -6,13 +6,11 @@ import jax.numpy as jnp
 from flax import nnx
 from jaxtyping import Array, Float
 
-from modrax.types import Shape
-
 
 class RunningNorm(nnx.Module):
     """Normalizes inputs using running mean and variance."""
 
-    def __init__(self, input_shape: Shape | int, epsilon: float = 1e-8):
+    def __init__(self, input_shape: tuple[int, ...] | int, epsilon: float = 1e-8):
         self.input_dim = input_shape if isinstance(input_shape, int) else math.prod(input_shape)
         self.epsilon = epsilon
 
@@ -36,9 +34,9 @@ class RunningNorm(nnx.Module):
             + delta**2 * self.count * batch_count / total_count
         )
 
-        self.count.value = total_count
-        self.mean.value = new_mean
-        self.var.value = m2 / total_count
+        self.count[...] = total_count
+        self.mean[...] = new_mean
+        self.var[...] = m2 / total_count
 
     def __call__(self, x: Float[Array, "B ..."]) -> Float[Array, "B D"]:
         x = x.reshape(x.shape[0], -1)

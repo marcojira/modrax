@@ -1,49 +1,43 @@
 """Training utilities for RL algorithms."""
 
-import dataclasses
 import os
 import time
 from dataclasses import dataclass, field
 
-import imageio.v3 as iio
-import wandb
-
-from modrax.alg.base import Alg
-from modrax.optimizer import Optimizer, OptimizerConfig
-from modrax.types import Config
+from modrax.alg.base import Alg, AlgConfig
+from modrax.logging import (
+    WandbConfig,
+    finish_logging,
+    format_metrics,
+    init_logging,
+    log_metrics,
+    log_trajectories,
+    pprint,
+)
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
 from flax import nnx
+from jaxtyping import Array, Key
 from rich import print
 from tqdm import tqdm
 
-from modrax.env import Env, EnvConfig
-from modrax.env.base import StateWithMetrics
-from modrax.network.base import Network
-from modrax.utils import format_metrics, pprint, render_trajectories, save_metrics_jsonl
+from modrax.env import EnvConfig
+from modrax.eval import evaluate
+from modrax.network.base import Network, NetworkConfig
 
 
-@dataclass
-class WandbConfig:
-    enabled: bool = False
-    project: str = ""
-    entity: str | None = None
-    run_name: str | None = None
-    tags: tuple[str] | None = None
-
-
-@dataclass
-class TrainConfig(Config):
+@dataclass(frozen=True)
+class TrainConfig:
     env_cfg: EnvConfig
-    network_cfg: Config
-    optimizer_cfg: OptimizerConfig
-    alg_cfg: Config
+    network_cfg: NetworkConfig
+    alg_cfg: AlgConfig
 
     seed: int
 
     eval_interval: int = 0
+    eval_max_steps: int = 1000
 
     wandb: WandbConfig = field(default_factory=WandbConfig)
     display_network: bool = False
@@ -53,72 +47,20 @@ class TrainConfig(Config):
     num_gif_trajectories: int = 5
 
 
-def log_metrics(metrics: dict, config: TrainConfig, filename: str):
-    """Log metrics to wandb and/or save to JSONL."""
-    if config.wandb.enabled:
-        wandb.log(metrics)
-    if config.save_path is not None:
-        save_metrics_jsonl(metrics, os.path.join(config.save_path, filename))
-
-
-def log_trajectories(
-    env: Env,
-    trajectories: StateWithMetrics,
-    config: TrainConfig,
-    epoch: int,
-    n_trajectories: int = 2,
-    fps: int = 10,
-):
-    """Render trajectories and log as GIFs to wandb and/or save to disk."""
-    if not (config.save_gif_local or config.save_gif_wandb):
-        return
-
-    rendered = render_trajectories(env, jax.tree.map(lambda x: x[:, :n_trajectories], trajectories))
-
-    for i, frames in enumerate(rendered):
-        if config.save_gif_local and config.save_path is not None:
-            path = os.path.join(config.save_path, f"trajectory_{epoch}_{i}.gif")
-            iio.imwrite(path, frames, extension=".gif", plugin="pillow", loop=0, fps=fps)
-        if config.save_gif_wandb and config.wandb.enabled:
-            video = wandb.Video(frames.transpose(0, 3, 1, 2), fps=fps, format="mp4")
-            wandb.log({f"eval_trajectories/traj_{i}": video})
-
-
-def flatten_cfg(config: TrainConfig) -> dict:
-    """Flatten TrainConfig into a flat dict with prefixed keys for wandb."""
-    flat = {}
-    for f in dataclasses.fields(config):
-        value = getattr(config, f.name)
-        if dataclasses.is_dataclass(value):
-            for inner_f in dataclasses.fields(value):
-                flat[f"{f.name}.{inner_f.name}"] = getattr(value, inner_f.name)
-        else:
-            flat[f.name] = value
-    return flat
-
-
-def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: TrainConfig) -> Network:
+def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
     """Run training loop. Supports both standard and recurrent networks."""
-    key = jax.random.key(cfg.seed)
+    env = algorithm.env
 
-    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(network, nnx.Param)))
+    num_params = sum(p.size for p in jax.tree.leaves(nnx.state(algorithm.network, nnx.Param)))
     print(f"Training a network with {num_params:} parameters...")
 
-    if cfg.display_network:
-        nnx.display(network)
+    if config.display_network:
+        nnx.display(algorithm.network)
 
-    # Wandb
-    if cfg.wandb.enabled:
-        wandb.init(
-            project=cfg.wandb.project,
-            entity=cfg.wandb.entity,
-            name=cfg.wandb.run_name,
-            tags=cfg.wandb.tags,
-            config=flatten_cfg(cfg),
-        )
+    init_logging(config)
 
     # Training loop
-    num_epochs = alg.total_steps // (alg.env_steps_per_epoch)
+    num_epochs = algorithm.cfg.total_steps // algorithm.env_steps_per_epoch
     pbar = tqdm(range(num_epochs), desc="Training")
     start = time.time()
 
@@ -126,10 +68,10 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         key, epoch_key = jax.random.split(key)
 
         # Alg epoch
-        metrics = alg(epoch_key)
+        metrics = algorithm.step(epoch_key)
 
         # Metrics
-        total_steps = epoch * alg.env_steps_per_epoch
+        total_steps = epoch * algorithm.env_steps_per_epoch
         metrics["epoch"] = epoch
         metrics["steps_M"] = total_steps / 1e6
         metrics["steps/s"] = total_steps / (time.time() - start)
@@ -137,28 +79,40 @@ def train(env: Env, network: Network, optimizer: Optimizer, alg: Alg, cfg: Train
         formatted_metrics = format_metrics(metrics)
         pbar.set_postfix({k: v for k, v in formatted_metrics.items() if not k.startswith("info/")})
 
-        log_metrics(formatted_metrics, cfg, "metrics.jsonl")
+        log_metrics(formatted_metrics, config, "metrics.jsonl")
 
         # Evaluation
-        if cfg.eval_interval and (epoch % cfg.eval_interval == 0 or epoch == num_epochs - 1):
+        if config.eval_interval and (
+            epoch % config.eval_interval == 0 or epoch == num_epochs - 1
+        ):
             eval_key, key = jax.random.split(key)
-            eval_metrics, trajectories = alg.eval(eval_key)
+            eval_metrics, trajectories = evaluate(
+                algorithm,
+                eval_key,
+                max_steps=config.eval_max_steps,
+                num_trajectories=config.num_gif_trajectories,
+            )
             eval_metrics["epoch"] = epoch
             eval_metrics["steps_M"] = total_steps / 1e6
             eval_metrics = {f"eval/{k}": v for k, v in format_metrics(eval_metrics).items()}
 
             pprint(eval_metrics)
-            log_metrics(eval_metrics, cfg, "eval.jsonl")
-            log_trajectories(env, trajectories, cfg, epoch, n_trajectories=cfg.num_gif_trajectories)
+            log_metrics(eval_metrics, config, "eval.jsonl")
+            log_trajectories(
+                env,
+                trajectories,
+                config,
+                epoch,
+                n_trajectories=config.num_gif_trajectories,
+            )
 
     # Save checkpoint
-    if cfg.save_path is not None:
-        checkpoint_path = os.path.join(cfg.save_path, "checkpoint")
-        network.save(checkpoint_path)
+    if config.save_path is not None:
+        checkpoint_path = os.path.join(config.save_path, "checkpoint")
+        algorithm.network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
-    if cfg.wandb.enabled:
-        wandb.finish()
+    finish_logging(config)
 
     print("\nTraining completed!")
-    return network
+    return algorithm.network

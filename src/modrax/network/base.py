@@ -6,14 +6,15 @@ from typing import Any
 
 import orbax.checkpoint as ocp
 from flax import nnx
-from jaxtyping import Array, Float, Int, Key
+from jaxtyping import Array, Key, Shaped
 
 from modrax.env.base import StateWithMetrics
-from modrax.types import Config
 
 
-@dataclass
-class NetworkConfig(Config):
+@dataclass(frozen=True)
+class NetworkConfig:
+    """Marker base for consistent network configuration typing."""
+
     pass
 
 
@@ -22,12 +23,27 @@ class Network(nnx.Module):
 
     def policy(
         self, env_state: StateWithMetrics, key: Key[Array, ""]
-    ) -> tuple[Int[Array, " B"], Any]:
+    ) -> tuple[Shaped[Array, "B ..."], Any]:
         """Select actions given the current env state. Returns (actions, network_output)
         where network_output contains algorithm-specific data stored during rollout collection."""
         raise NotImplementedError
 
-    def reset(self, done: Float[Array, " B"]):
+    def eval_policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Shaped[Array, "B ..."], Any]:
+        """Select actions for evaluation."""
+        return self.policy(env_state, key)
+
+    def eval(self, **attributes):
+        """Set evaluation mode and clear any stored recurrent state."""
+        super().eval(**attributes)
+        self.reset()
+        return self
+
+    def reset(self):
+        return
+
+    def reset_episodes(self, done: Array):
         return
 
     def get_carry(self):

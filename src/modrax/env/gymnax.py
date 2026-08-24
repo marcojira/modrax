@@ -7,13 +7,32 @@ import gymnax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from gymnax.environments import spaces
 from jaxtyping import Array, Key
+from matplotlib.figure import Figure
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
-from modrax.utils import fig_to_rgb_array
+from modrax.env.base import (
+    ContinuousActionSpec,
+    DiscreteActionSpec,
+    Env,
+    EnvConfig,
+    State,
+    StateWithMetrics,
+    StepOutput,
+)
 
 
-@dataclass
+def fig_to_rgb_array(fig: Figure) -> np.ndarray:
+    """Convert a Matplotlib figure to an RGB array."""
+    fig.canvas.draw()
+    buf = fig.canvas.buffer_rgba()  # type: ignore
+    width, height = fig.canvas.get_width_height()
+    rgb_array = np.frombuffer(buf, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
+    plt.close(fig)
+    return rgb_array
+
+
+@dataclass(frozen=True)
 class GymnaxConfig(EnvConfig):
     env_name: Literal[
         # Classic Control
@@ -53,7 +72,18 @@ class GymnaxEnv(Env):
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
+        action_space = self._env.action_space(self._env_params)
+        if isinstance(action_space, spaces.Discrete):
+            self.action_spec = DiscreteActionSpec(action_space.n)
+        elif isinstance(action_space, spaces.Box):
+            shape = tuple(action_space.shape)
+            self.action_spec = ContinuousActionSpec(
+                shape=shape,
+                low=jnp.broadcast_to(jnp.asarray(action_space.low, dtype=jnp.float32), shape),
+                high=jnp.broadcast_to(jnp.asarray(action_space.high, dtype=jnp.float32), shape),
+            )
+        else:
+            raise TypeError(f"Unsupported Gymnax action space: {type(action_space).__name__}")
 
         super().__init__(config)
 
@@ -62,7 +92,7 @@ class GymnaxEnv(Env):
 
         return State(
             env_state=gymnax_state,
-            obs=obs.astype(jnp.int8),
+            obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 
@@ -76,7 +106,7 @@ class GymnaxEnv(Env):
         step_output = StepOutput(reward=reward, done=done, truncation=jnp.bool_(False), info=info)
         new_state = State(
             env_state=gymnax_state,
-            obs=obs.astype(jnp.int8),
+            obs=obs,
             action_mask=jnp.ones(self.action_size, dtype=jnp.float32),
         )
 
@@ -102,7 +132,7 @@ class GymnaxEnv(Env):
         cmap_colors = sns.color_palette("cubehelix", n_channels)
         color_table = (np.array([(0, 0, 0)] + list(cmap_colors)) * 255).astype(np.uint8)
 
-        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1)  # (B, H, W)
+        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1).astype(np.intp)
         return color_table[channel_idx]  # (B, H, W, 3)
 
     """ Using logic from https://github.com/RobertTLange/gymnax/blob/main/gymnax/visualize/"""

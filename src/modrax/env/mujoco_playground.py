@@ -9,12 +9,12 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float, Key
+from jaxtyping import Array, Key
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import ContinuousActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class MuJoCoPlaygroundConfig(EnvConfig):
     env_name: Literal[
         # DM Control Suite
@@ -82,10 +82,16 @@ class MuJoCoPlaygroundEnv(Env):
         from mujoco_playground import registry
 
         self.env_cfg = registry.get_default_config(config.env_name)
-        self._env = registry.load(config.env_name)
+        # warp-lang 1.13.0 removed warp.types.warp_type_to_np_dtype, breaking the warp mjx backend
+        self._env = registry.load(config.env_name, config_overrides={"impl": "jax"})
 
         self.obs_shape = (self._env.observation_size,)
-        self.action_size = self._env.action_size
+        action_shape = (self._env.action_size,)
+        self.action_spec = ContinuousActionSpec(
+            shape=action_shape,
+            low=-jnp.ones(action_shape),
+            high=jnp.ones(action_shape),
+        )
 
         super().__init__(config)
 
@@ -122,10 +128,6 @@ class MuJoCoPlaygroundEnv(Env):
         )
 
         return step_output, new_state
-
-    def sample_action(self, key: Key[Array, ""], num_envs: int) -> Float[Array, "B A"]:
-        """Sample random continuous actions in [-1, 1]."""
-        return jax.random.uniform(key, (num_envs, self.action_size), minval=-1.0, maxval=1.0)
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
         rendered = self._env.render([state.env_state], width=256, height=256)

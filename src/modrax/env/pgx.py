@@ -13,7 +13,7 @@ from pgx.minatar.freeway import MinAtarFreeway
 from pgx.minatar.seaquest import MinAtarSeaquest
 from pgx.minatar.space_invaders import MinAtarSpaceInvaders
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 MINATAR_ENV_MAP = {
     "minatar-asterix": MinAtarAsterix,
@@ -24,7 +24,7 @@ MINATAR_ENV_MAP = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class PGXConfig(EnvConfig):
     env_name: Literal[
         "2048",
@@ -61,7 +61,7 @@ class PGXEnv(Env):
             self._env = make(config.env_name)
 
         self.obs_shape = self._env.observation_shape
-        self.action_size = self._env.num_actions
+        self.action_spec = DiscreteActionSpec(self._env.num_actions)
 
         super().__init__(config)
 
@@ -174,7 +174,7 @@ class PGXEnv(Env):
         cmap_colors = PGXEnv._get_minatar_cmap(n_channels)
         color_table = (np.array([(0, 0, 0)] + cmap_colors) * 255).astype(np.uint8)
 
-        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1)  # (B, H, W)
+        channel_idx = np.max(obs * np.arange(1, n_channels + 1), axis=-1).astype(np.intp)
         return color_table[channel_idx]  # (B, H, W, 3)
 
     @staticmethod
@@ -184,5 +184,7 @@ class PGXEnv(Env):
         color_table = (np.array([(0, 0, 0)] + cmap_colors) * 255).astype(np.uint8)
 
         # channel_idx: 0=background, k+1=channel k active
-        channel_idx = np.max(np.array(obs) * np.arange(1, n_channels + 1), axis=-1)
+        channel_idx = np.max(np.array(obs) * np.arange(1, n_channels + 1), axis=-1).astype(
+            np.intp
+        )
         return color_table[channel_idx]  # (H, W, 3)

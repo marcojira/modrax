@@ -1,19 +1,19 @@
 """Wrapper for Craftax and Craftax-Classic from https://github.com/MichaelTMatthews/Craftax"""
 
+import functools
 from dataclasses import dataclass
 from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from craftax.craftax.constants import Achievement
 from craftax.craftax_env import make_craftax_env_from_name
 from jaxtyping import Array, Key
 
-from modrax.env.base import Env, EnvConfig, State, StateWithMetrics, StepOutput
+from modrax.env.base import DiscreteActionSpec, Env, EnvConfig, State, StateWithMetrics, StepOutput
 
 
-@dataclass
+@dataclass(frozen=True)
 class CraftaxConfig(EnvConfig):
     env_name: Literal[
         "Craftax-Symbolic-v1",
@@ -21,16 +21,196 @@ class CraftaxConfig(EnvConfig):
         "Craftax-Classic-Symbolic-v1",
         "Craftax-Classic-Pixels-v1",
     ] = "Craftax-Symbolic-v1"
+    use_action_mask: bool = True
+    num_reset_envs: int = 16
+
+
+@functools.cache
+def get_achievements():
+    # Lazy import since it loads textures (and initializes jax to do so).
+    # We want the import (and CLI, tests, etc) to be very quick.
+    from craftax.craftax.constants import Achievement
+
+    return Achievement
+
+
+"""Action masking taken from https://github.com/Doguhan58/craftax-maskedPPO-reward-shaping/blob/main/src/modules/environments/action_mask_wrapper.py. All credit to https://github.com/Doguhan58."""
+
+
+def compute_action_mask(state):
+    # Lazy import since it loads textures (and initializes jax to do so).
+    from craftax.craftax.constants import BlockType, ItemType
+
+    inv = state.inventory
+    level_map = state.map[state.player_level]
+
+    near_table, near_furnace = _check_nearby_blocks(state, level_map)
+    near_table_furnace = near_table & near_furnace
+
+    max_health = 8 + state.player_strength
+    max_energy = 7 + 2 * state.player_dexterity
+    can_sleep_rest = (~state.is_sleeping) & (~state.is_resting)
+
+    proj_count = state.player_projectiles.mask[state.player_level].sum()
+    can_shoot = proj_count < 3
+
+    facing_block = _get_facing_block(state, level_map)
+    facing_fire_table = facing_block == BlockType.ENCHANTMENT_TABLE_FIRE.value
+    facing_ice_table = facing_block == BlockType.ENCHANTMENT_TABLE_ICE.value
+    has_matching_gem = jnp.where(facing_fire_table, inv.ruby >= 1, inv.sapphire >= 1)
+    ench_base = (state.player_mana >= 9) & (facing_fire_table | facing_ice_table) & has_matching_gem
+
+    item_on_tile = state.item_map[state.player_level][
+        state.player_position[0], state.player_position[1]
+    ]
+    tile_light = state.light_map[state.player_level][
+        state.player_position[0], state.player_position[1]
+    ]
+    is_dark_here = tile_light < 0.5
+    has_xp = state.player_xp >= 1
+
+    has_wood = inv.wood >= 1
+    has_stone = inv.stone >= 1
+    has_stone_place = inv.stone > 0
+    has_iron = inv.iron >= 1
+    has_coal = inv.coal >= 1
+    has_dia2 = inv.diamond >= 2
+    has_dia3 = inv.diamond >= 3
+
+    craft_wood_stone = near_table & has_wood & has_stone
+    craft_iron = near_table_furnace & has_wood & has_stone & has_iron & has_coal
+
+    sword_lt = lambda n: inv.sword < n
+    pick_lt = lambda n: inv.pickaxe < n
+    armour_sum = inv.armour.sum()
+
+    true_scalar = jnp.bool_(True)
+
+    mask = jnp.stack(
+        [
+            # 0:NOOP, 1:LEFT, 2:RIGHT, 3:UP, 4:DOWN, 5:DO
+            true_scalar,
+            true_scalar,
+            true_scalar,
+            true_scalar,
+            true_scalar,
+            true_scalar,
+            # 6:SLEEP
+            (state.player_energy < max_energy) & can_sleep_rest,
+            # 7:PLACE_STONE
+            has_stone_place,
+            # 8:PLACE_TABLE
+            inv.wood >= 2,
+            # 9:PLACE_FURNACE
+            has_stone_place,
+            # 10:PLACE_PLANT
+            inv.sapling > 0,
+            # 11:MAKE_WOOD_PICKAXE
+            near_table & has_wood & pick_lt(1),
+            # 12:MAKE_STONE_PICKAXE
+            craft_wood_stone & pick_lt(2),
+            # 13:MAKE_IRON_PICKAXE
+            craft_iron & pick_lt(3),
+            # 14:MAKE_WOOD_SWORD
+            near_table & has_wood & sword_lt(1),
+            # 15:MAKE_STONE_SWORD
+            craft_wood_stone & sword_lt(2),
+            # 16:MAKE_IRON_SWORD
+            craft_iron & sword_lt(3),
+            # 17:REST
+            (state.player_health < max_health) & can_sleep_rest,
+            # 18:DESCEND
+            (item_on_tile == ItemType.LADDER_DOWN.value) & (state.player_level < 8),
+            # 19:ASCEND
+            (item_on_tile == ItemType.LADDER_UP.value) & (state.player_level > 0),
+            # 20:MAKE_DIAMOND_PICKAXE
+            near_table & has_wood & has_dia3 & pick_lt(4),
+            # 21:MAKE_DIAMOND_SWORD
+            near_table & has_wood & has_dia2 & sword_lt(4),
+            # 22:MAKE_IRON_ARMOUR
+            near_table_furnace & (inv.iron >= 3) & (inv.coal >= 3) & (inv.armour < 1).any(),
+            # 23:MAKE_DIAMOND_ARMOUR
+            near_table & has_dia3 & (inv.armour < 2).any(),
+            # 24:SHOOT_ARROW
+            (inv.bow >= 1) & (inv.arrows >= 1) & can_shoot,
+            # 25:MAKE_ARROW
+            craft_wood_stone & (inv.arrows < 99),
+            # 26:CAST_FIREBALL
+            state.learned_spells[0] & (state.player_mana >= 2) & can_shoot,
+            # 27:CAST_ICEBALL
+            state.learned_spells[1] & (state.player_mana >= 2) & can_shoot,
+            # 28:PLACE_TORCH
+            (inv.torches > 0) & is_dark_here,
+            # 29-34:DRINK_POTION_RED...YELLOW
+            inv.potions[0] > 0,
+            inv.potions[1] > 0,
+            inv.potions[2] > 0,
+            inv.potions[3] > 0,
+            inv.potions[4] > 0,
+            inv.potions[5] > 0,
+            # 35:READ_BOOK
+            (inv.books > 0) & (~state.learned_spells.all()),
+            # 36:ENCHANT_SWORD
+            ench_base & (inv.sword > 0),
+            # 37:ENCHANT_ARMOUR
+            ench_base & (armour_sum > 0),
+            # 38:MAKE_TORCH
+            near_table & has_wood & has_coal & (inv.torches < 99),
+            # 39:LEVEL_UP_DEXTERITY
+            has_xp & (state.player_dexterity < 5),
+            # 40:LEVEL_UP_STRENGTH
+            has_xp & (state.player_strength < 5),
+            # 41:LEVEL_UP_INTELLIGENCE
+            has_xp & (state.player_intelligence < 5),
+            # 42:ENCHANT_BOW
+            ench_base & (inv.bow > 0),
+        ]
+    )
+
+    return mask.astype(jnp.bool_)
+
+
+def _get_facing_block(state, level_map):
+    from craftax.craftax.constants import DIRECTIONS
+
+    direction = DIRECTIONS[state.player_direction]
+    target = state.player_position + direction
+    map_h, map_w = level_map.shape
+    target_clamped = jnp.clip(target, jnp.array([0, 0]), jnp.array([map_h - 1, map_w - 1]))
+    return level_map[target_clamped[0], target_clamped[1]]
+
+
+def _check_nearby_blocks(state, level_map):
+    from craftax.craftax.constants import CLOSE_BLOCKS, BlockType
+
+    positions = state.player_position + CLOSE_BLOCKS  # (8, 2)
+    map_h, map_w = level_map.shape
+    in_bounds = (
+        (positions[:, 0] >= 0)
+        & (positions[:, 0] < map_h)
+        & (positions[:, 1] >= 0)
+        & (positions[:, 1] < map_w)
+    )
+
+    clamped = jnp.clip(positions, 0, jnp.array([map_h - 1, map_w - 1]))
+    blocks = level_map[clamped[:, 0], clamped[:, 1]]
+
+    near_table = jnp.any(in_bounds & (blocks == BlockType.CRAFTING_TABLE.value))
+    near_furnace = jnp.any(in_bounds & (blocks == BlockType.FURNACE.value))
+    return near_table, near_furnace
 
 
 class CraftaxEnv(Env):
     def __init__(self, config: CraftaxConfig):
         self._env = make_craftax_env_from_name(config.env_name, auto_reset=False)
         self._env_params = self._env.default_params
+        self.is_classic = "Classic" in config.env_name
 
         # Get observation and action shapes from environment spaces
         self.obs_shape = self._env.observation_space(self._env_params).shape  # type: ignore
-        self.action_size = self._env.action_space(self._env_params).n  # type: ignore
+        self.action_spec = DiscreteActionSpec(
+            self._env.action_space(self._env_params).n  # type: ignore
+        )
 
         super().__init__(config)
 
@@ -40,7 +220,7 @@ class CraftaxEnv(Env):
         return State(
             env_state=craftax_state,
             obs=obs,
-            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
+            action_mask=self._compute_action_mask(craftax_state),
             info=self._achievements_info(craftax_state),
         )
 
@@ -57,28 +237,33 @@ class CraftaxEnv(Env):
         new_state = State(
             env_state=craftax_state,
             obs=obs,
-            action_mask=jnp.ones(self.action_size, dtype=jnp.bool),
+            action_mask=self._compute_action_mask(craftax_state),
             info=self._achievements_info(craftax_state),
         )
 
         return step_output, new_state
 
+    def _compute_action_mask(self, craftax_state):
+        if self.is_classic or not self.config.use_action_mask:
+            return jnp.ones(self.action_size, dtype=jnp.bool_)
+        return compute_action_mask(craftax_state)
+
     @staticmethod
     def _achievements_info(craftax_state) -> dict:
         achievements = craftax_state.achievements * 100.0
-        return {a.name.lower(): achievements[a.value] for a in Achievement}
+        return {a.name.lower(): achievements[a.value] for a in get_achievements()}
 
     def _get_renderer(self):
         if "Classic" in self.config.env_name:
-            from craftax.craftax_classic.renderer import render_craftax_pixels
+            from craftax.craftax_classic.renderer import make_craftax_pixel_renderer
         else:
-            from craftax.craftax.renderer import render_craftax_pixels
-        return render_craftax_pixels
+            from craftax.craftax.renderer import make_craftax_pixel_renderer
+        return make_craftax_pixel_renderer(16)
 
     def render(self, state: State | StateWithMetrics) -> np.ndarray:
-        rgb_array = self._get_renderer()(state.env_state, block_pixel_size=16)
+        rgb_array = self._get_renderer()(state.env_state)
         return np.array(rgb_array, dtype=np.uint8)
 
     def batch_render(self, states: StateWithMetrics) -> np.ndarray:
-        frames = jax.vmap(self._get_renderer(), in_axes=(0, None))(states.env_state, 16)
+        frames = jax.vmap(self._get_renderer())(states.env_state)
         return np.array(frames, dtype=np.uint8)

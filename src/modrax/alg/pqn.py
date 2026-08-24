@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -7,24 +7,27 @@ import optax
 from flax import nnx, struct
 from jaxtyping import Array, Float, Int, Key
 
-from modrax.alg.base import Alg
-from modrax.env.base import Env, StateWithMetrics
-from modrax.network.base import Network
-from modrax.optimizer import Optimizer
-from modrax.rollout.eval_rollout import eval_rollout
-from modrax.rollout.trajectory_rollout import trajectory_rollout
-from modrax.types import Config
-from modrax.utils import (
-    compute_training_metrics,
-    make_trajectory_minibatches,
-    make_transition_minibatches,
+from modrax.alg.base import (
+    Alg,
+    AlgConfig,
+    OptimizerConfig,
+    create_optimizer,
     update_network_minibatches,
+)
+from modrax.env.base import DiscreteActionSpec, Env, StateWithMetrics
+from modrax.metrics import compute_training_metrics
+from modrax.network.base import Network
+from modrax.rollout import trajectory_rollout
+from modrax.utils import (
+    batch_trajectories,
+    batch_transitions,
 )
 
 
-@dataclass
-class PQNConfig(Config):
+@dataclass(frozen=True)
+class PQNConfig(AlgConfig):
     name: str = "PQN"
+    optimizer_cfg: OptimizerConfig = OptimizerConfig()
 
     gamma: float = 0.99
     lambd: float = 0.65
@@ -39,6 +42,9 @@ class PQNConfig(Config):
     end_eps: float = 0.05
     eps_decay: float = 0.1
 
+    operator_fn: Callable = lambda q, cfg: jnp.max(q, axis=-1)
+    omega: float = 0.5
+
 
 """ NETWORK """
 
@@ -51,6 +57,8 @@ class PQNNetworkOutput:
 
 class PQNNetwork(Network):
     """Abstract base class for PQN networks."""
+
+    eps: nnx.Variable
 
     def train_forward(
         self,
@@ -65,6 +73,13 @@ class PQNNetwork(Network):
         self, env_state: StateWithMetrics, key: Key[Array, ""]
     ) -> tuple[Int[Array, " B"], PQNNetworkOutput]:
         raise NotImplementedError
+
+    def eval_policy(
+        self, env_state: StateWithMetrics, key: Key[Array, ""]
+    ) -> tuple[Int[Array, " B"], PQNNetworkOutput]:
+        """Select greedy actions for evaluation."""
+        self.eps[...] = 0.0
+        return self.policy(env_state, key)
 
 
 """ HELPERS """
@@ -89,12 +104,12 @@ def compute_targets(
         delta = lambda_returns - next_q
         lambda_returns = target_bootstrap + config.gamma * config.lambd * delta
         lambda_returns = (1 - done) * lambda_returns + done * reward
-        next_q = jnp.max(q_val, axis=-1)
+        next_q = config.operator_fn(q_val, config)
         return (lambda_returns, next_q), lambda_returns
 
-    last_q = jnp.max(q_targets[:, -1], axis=-1)
+    last_q = config.operator_fn(q_targets[:, -1], config)
     lambda_return = rewards[:, -2] + config.gamma * (1 - dones[:, -2]) * last_q
-    prev_q = jnp.max(q_targets[:, -2], axis=-1)
+    prev_q = config.operator_fn(q_targets[:, -2], config)
 
     scan_fn = nnx.scan(
         backwards_step, in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1), reverse=True
@@ -127,8 +142,8 @@ def pqn_recurrent_loss(network: PQNNetwork, minibatch, config: PQNConfig):
         traj.obs, traj.dones, minibatch["init_carry"], traj.network_output.carry
     )
     target_q_values = jax.lax.stop_gradient(q_values)
+    target_q_values = jnp.where(traj.action_masks, target_q_values, -jnp.inf)
 
-    # Compute targets
     targets = compute_targets(traj.rewards, traj.dones, target_q_values, config)
 
     chosen_q_values = jnp.take_along_axis(q_values, traj.actions[..., None], axis=-1)
@@ -149,33 +164,38 @@ class PQNState:
 
 
 class PQNAlg(Alg):
+    cfg: PQNConfig
+
     def __init__(
         self,
         env: Env,
         network: Network,
-        optimizer: Optimizer,
         cfg: PQNConfig,
         key: Key[Array, ""],
     ):
-        super().__init__(env, network, optimizer, cfg, key)
-        self.total_steps = cfg.total_steps
+        if not isinstance(env.action_spec, DiscreteActionSpec):
+            raise ValueError("PQN requires a discrete action space")
+
+        super().__init__(env, network, cfg)
         self.env_steps_per_epoch = cfg.num_envs * cfg.num_timesteps
-        self.num_epochs = self.total_steps // self.env_steps_per_epoch
+        self.num_epochs = cfg.total_steps // self.env_steps_per_epoch
         self.total_updates = compute_total_updates(cfg)
 
         self.eps_scheduler = optax.linear_schedule(
             cfg.start_eps, cfg.end_eps, int(cfg.eps_decay * self.num_epochs)
         )
 
+        optimizer = create_optimizer(network, cfg.optimizer_cfg, self.total_updates)
         env_state = self.env.reset(jax.random.split(key, self.cfg.num_envs))
-        self.state = PQNState(nnx.split((self.network, self.optimizer)), env_state, 0)
-        self.loop = nnx.jit(self._loop)
-    def _loop(self, state: PQNState, key):
+        self.state = PQNState(nnx.split((network, optimizer)), env_state, 0)
+        self.jitted_step = nnx.jit(self._step_fn)
+
+    def _step_fn(self, state: PQNState, key):
         rollout_key, update_key = jax.random.split(key)
         network, optimizer = nnx.merge(*state.agent_state)
 
         # Update epsilon
-        network.eps = self.eps_scheduler(state.step)
+        network.eps[...] = self.eps_scheduler(state.step)
 
         # Generate data
         init_carry = network.get_carry()
@@ -193,7 +213,7 @@ class PQNAlg(Alg):
                     "env_state": env_state,
                 }
                 minibatch_size = self.cfg.num_envs // self.cfg.num_minibatches
-                minibatches = make_trajectory_minibatches(all_data, epoch_key, minibatch_size)
+                minibatches = batch_trajectories(all_data, epoch_key, minibatch_size)
 
                 loss, infos = update_network_minibatches(
                     network, optimizer, minibatches, pqn_recurrent_loss, self.cfg
@@ -204,8 +224,14 @@ class PQNAlg(Alg):
                     trajectory.obs.reshape(-1, *trajectory.obs.shape[2:])
                 )
                 q_targets = q_targets.reshape(trajectory.obs.shape[0], trajectory.obs.shape[1], -1)
+                q_targets = jnp.where(trajectory.action_masks, q_targets, -jnp.inf)
 
-                targets = compute_targets(trajectory.rewards, trajectory.dones, q_targets, self.cfg)
+                targets = compute_targets(
+                    trajectory.rewards,
+                    trajectory.dones,
+                    q_targets,
+                    self.cfg,
+                )
                 all_data = {
                     "trajectory": jax.tree.map(lambda x: x[:, :-1], trajectory),
                     "targets": targets,
@@ -214,7 +240,7 @@ class PQNAlg(Alg):
                 minibatch_size = (
                     self.cfg.num_envs * self.cfg.num_timesteps
                 ) // self.cfg.num_minibatches
-                minibatches = make_transition_minibatches(all_data, epoch_key, minibatch_size)
+                minibatches = batch_transitions(all_data, epoch_key, minibatch_size)
 
                 loss, infos = update_network_minibatches(
                     network, optimizer, minibatches, pqn_loss, self.cfg
@@ -225,16 +251,6 @@ class PQNAlg(Alg):
 
         return PQNState(nnx.split((network, optimizer)), env_state, state.step + 1), metrics
 
-    def __call__(self, key):
-        self.state, metrics = self.loop(self.state, key)
+    def step(self, key):
+        self.state, metrics = self.jitted_step(self.state, key)
         return metrics
-
-    def eval(self, key):
-        network, _ = nnx.merge(*self.state.agent_state)
-        network = nnx.clone(network)
-        network.eps = 0.0
-
-        if network.is_recurrent:
-            network.reset(jnp.ones(self.cfg.num_envs))
-
-        return eval_rollout(self.env, network, self.cfg.num_envs, key, max_steps=1000)

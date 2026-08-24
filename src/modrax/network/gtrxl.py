@@ -66,14 +66,19 @@ class GatedTransformerXL(nnx.Module):
 
         self.carry = nnx.Variable(GTrXLRecurrentState(memory=memory, mask=mask))
 
-    def reset(self, done: Float[Array, " B"]):
+    def reset(self):
+        carry = self.carry.get_value()
+        self.carry.set_value(jax.tree.map(jnp.zeros_like, carry))
+
+    def reset_episodes(self, done: Array):
         done = done[:, None, None, None]  # Add dimensions for broadcasting
 
         # Reset memory/mask for states that are done
-        memory = jnp.where(done, 0, self.carry.memory)
-        mask = jnp.where(done, 0, self.carry.mask)
+        carry = self.carry.get_value()
+        memory = jnp.where(done, 0, carry.memory)
+        mask = jnp.where(done, 0, carry.mask)
 
-        self.carry.value = GTrXLRecurrentState(memory=memory, mask=mask)
+        self.carry.set_value(GTrXLRecurrentState(memory=memory, mask=mask))
 
     def _forward(
         self,
@@ -238,5 +243,5 @@ class GatedTransformerXL(nnx.Module):
         # Create carry to store for trainining later
         store_carry = GTrXLRecurrentState(memory=new_carry.memory[:, -1], mask=self.carry.mask)
 
-        self.carry.value = new_carry
+        self.carry.set_value(new_carry)
         return store_carry, x[:, 0, :]
