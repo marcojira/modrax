@@ -5,6 +5,7 @@ AGENTS.md
 notes/
 out/
 *EXP_*
+exps/
 
 # Python
 __pycache__/

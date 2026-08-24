@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
 import jax
-import jax.numpy as jnp
 import optax
 from flax import nnx
 from jaxtyping import Array, Float, Key
@@ -40,7 +39,9 @@ def create_optimizer(
     if config.optimizer_type == "adam":
         transformation = optax.adam(learning_rate)
     elif config.optimizer_type == "adamw":
-        transformation = optax.adamw(learning_rate, weight_decay=config.weight_decay)
+        transformation = optax.adamw(
+            learning_rate, eps=1e-5, weight_decay=config.weight_decay
+        )
     elif config.optimizer_type == "radam":
         transformation = optax.radam(learning_rate)
     elif config.optimizer_type == "sgd":
@@ -58,14 +59,7 @@ def create_optimizer(
             transformation,
         )
 
-    optimizer = nnx.Optimizer(network, transformation, wrt=nnx.Param)
-
-    def _warmup(model):
-        return jnp.array(0.0), {}
-
-    _, grads = nnx.value_and_grad(_warmup, has_aux=True)(network)
-    optimizer.update(network, grads)
-    return optimizer
+    return nnx.Optimizer(network, transformation, wrt=nnx.Param)
 
 
 def update_network_minibatches(
