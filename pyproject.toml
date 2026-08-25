@@ -42,7 +42,7 @@ all = [
     "octax",
     "pgx",
     "playground",
-    "sequax"
+    "sequax @ git+https://github.com/marcojira/sequax.git"
 ]
 
 [dependency-groups]
