@@ -107,13 +107,15 @@ def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
                 n_trajectories=config.num_gif_trajectories,
             )
 
+    trained_network = algorithm.get_network()
+
     # Save checkpoint
     if config.save_path is not None:
         checkpoint_path = os.path.join(config.save_path, "checkpoint")
-        algorithm.network.save(checkpoint_path)
+        trained_network.save(checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
     finish_logging(config)
 
     print("\nTraining completed!")
-    return algorithm.network
+    return trained_network
