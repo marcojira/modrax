@@ -137,7 +137,7 @@ class GatedTransformerXL(nnx.Module):
             self, memory = carry
             hidden, out = self._forward(obs, memory, mask)
             new_memory = jnp.roll(memory, -hidden.shape[1], axis=1)
-            new_memory = memory.at[:, -hidden.shape[1] :].set(hidden)
+            new_memory = new_memory.at[:, -hidden.shape[1] :].set(hidden)
 
             new_memory = jax.lax.stop_gradient(new_memory)
             return (self, new_memory), out

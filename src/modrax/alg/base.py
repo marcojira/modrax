@@ -21,6 +21,7 @@ class OptimizerConfig:
     optimizer_type: Literal["adam", "adamw", "radam", "sgd", "rmsprop", "muon"] = "adam"
     weight_decay: float = 1e-5
     learning_rate: float = 3e-4
+    adam_eps: float = 1e-5
     lr_decay: bool = False
     gradient_clip: float | None = None
 
@@ -37,7 +38,7 @@ def create_optimizer(
         learning_rate = optax.linear_schedule(config.learning_rate, 0.0, total_num_updates)
 
     if config.optimizer_type == "adam":
-        transformation = optax.adam(learning_rate)
+        transformation = optax.adam(learning_rate, eps=config.adam_eps)
     elif config.optimizer_type == "adamw":
         transformation = optax.adamw(
             learning_rate, eps=1e-5, weight_decay=config.weight_decay

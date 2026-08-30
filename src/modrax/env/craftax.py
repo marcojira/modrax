@@ -21,7 +21,7 @@ class CraftaxConfig(EnvConfig):
         "Craftax-Classic-Symbolic-v1",
         "Craftax-Classic-Pixels-v1",
     ] = "Craftax-Symbolic-v1"
-    use_action_mask: bool = True
+    use_action_mask: bool = False
     num_reset_envs: int = 16
 
 

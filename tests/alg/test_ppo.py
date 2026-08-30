@@ -17,6 +17,9 @@ class TinyPPONetwork(PPONetwork):
         self.policy_head = nnx.Linear(obs_size, num_actions, rngs=rngs)
         self.value_head = nnx.Linear(obs_size, 1, rngs=rngs)
 
+    def bootstrap_value(self, env_state):
+        return self.value_head(env_state.obs)
+
     def train_forward(self, obs, dones, init_carry, saved_carry):
         return PPONetworkOutput(self.policy_head(obs), self.value_head(obs), None)
 

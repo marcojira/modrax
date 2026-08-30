@@ -106,6 +106,7 @@ def train(algorithm: Alg, config: TrainConfig, key: Key[Array, ""]) -> Network:
                 epoch,
                 n_trajectories=config.num_gif_trajectories,
             )
+            del eval_metrics, trajectories
 
     trained_network = algorithm.get_network()
 

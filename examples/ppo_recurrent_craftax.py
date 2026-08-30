@@ -31,7 +31,7 @@ class LSTMConfig(NetworkConfig):
 
 @dataclass(frozen=True)
 class GTrXLConfig(NetworkConfig):
-    hidden_dim: int = 512
+    hidden_dim: int = 256
     num_heads: int = 8
     num_layers: int = 2
     segment_len: int = 64
@@ -53,9 +53,13 @@ class CraftaxRecurrentPPOConfig(TrainConfig):
     )
     network_cfg: CraftaxNetworkConfig = CraftaxNetworkConfig()
     alg_cfg: PPOConfig = PPOConfig(
-        optimizer_cfg=OptimizerConfig(learning_rate=2e-4, gradient_clip=1.0, lr_decay=True),
+        optimizer_cfg=OptimizerConfig(
+            learning_rate=2e-4,
+            gradient_clip=1.0,
+            lr_decay=True,
+        ),
         total_steps=1_000_000_000,
-        num_gen_steps=129,
+        num_gen_steps=128,
         num_minibatches=8,
         gamma=0.999,
         gae_lambda=0.8,
@@ -70,6 +74,7 @@ class CraftaxRecurrentPPOConfig(TrainConfig):
     )
     eval_interval: int = 250
     eval_max_steps: int = 5000
+    save_gif_wandb: bool = True
     gif_max_steps: int = 1000
     seed: int = 0
 
@@ -118,6 +123,14 @@ class CraftaxNetwork(PPONetwork):
         policy_logits = self.policy_head(self.policy_ln(x))
         value = self.value_head(self.value_ln(x))
         return policy_logits, value
+
+    def bootstrap_value(self, env_state: StateWithMetrics):
+        obs = env_state.obs.reshape(env_state.obs.shape[0], -1)
+        encoded = self.encoder(obs)
+        _, out = self.memory._eval_forward(encoded)
+        if self.architecture == "gtrxl":
+            out = out[:, 0]
+        return self.value_head(self.value_ln(out))
 
     def train_forward(
         self, obs: Float[Array, "B T ..."], dones: Float[Array, "B T"], init_carry, saved_carry

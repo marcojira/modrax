@@ -51,6 +51,9 @@ class PPONetworkOutput:
 class PPONetwork(Network):
     """Abstract base class for PPO networks"""
 
+    def bootstrap_value(self, env_state: StateWithMetrics) -> Float[Array, "B 1"]:
+        raise NotImplementedError
+
     def train_forward(
         self,
         obs: Float[Array, "B T ..."],
@@ -73,7 +76,7 @@ def compute_total_updates(cfg: PPOConfig) -> int:
 
 
 def compute_gae_advantages(
-    trajectory: Trajectory, config: PPOConfig
+    trajectory: Trajectory, last_val: Float[Array, " B"], config: PPOConfig
 ) -> tuple[Float[Array, "B T"], Float[Array, "B T"]]:
     def backwards_fn(gae_and_next_val, transition):
         gae, next_val = gae_and_next_val
@@ -85,13 +88,12 @@ def compute_gae_advantages(
         return (gae, val), gae
 
     values = trajectory.network_output.value.squeeze(-1)  # [B, T]
-    last_val = values[:, -1]
 
-    transitions = (trajectory.dones[:, :-1], values[:, :-1], trajectory.rewards[:, :-1])
+    transitions = (trajectory.dones, values, trajectory.rewards)
     _, advantages = nnx.scan(
         backwards_fn, in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1), reverse=True
     )((jnp.zeros_like(last_val), last_val), transitions)
-    returns = advantages + values[:, :-1]
+    returns = advantages + values
     return advantages, returns
 
 
@@ -196,11 +198,11 @@ class PPOAlg(Alg):
             network, self.env.step, state.env_state, self.cfg.num_gen_steps, rollout_key
         )
 
-        # Bootstrap using last value so [B T] -> [B T-1]
-        advantages, returns = compute_gae_advantages(data, self.cfg)
+        last_val = network.bootstrap_value(env_state).squeeze(-1)
+        advantages, returns = compute_gae_advantages(data, last_val, self.cfg)
 
         all_data = {
-            "trajectory": jax.tree.map(lambda x: x[:, :-1], data),
+            "trajectory": data,
             "advantage": advantages,
             "return": returns,
             "init_carry": init_carry,
