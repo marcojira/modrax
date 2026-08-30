@@ -44,6 +44,7 @@ class TrainConfig:
     save_path: str | None = None
     save_gif_wandb: bool = False
     save_gif_local: bool = False
+    gif_max_steps: int | None = None
     num_gif_trajectories: int = 5
 
 

@@ -34,7 +34,6 @@ gymnax = ["gymnax", "matplotlib"]
 octax = ["octax"]
 pgx = ["pgx"]
 mujoco = ["playground"]
-sequax = ["sequax @ git+https://github.com/marcojira/sequax.git"]
 all = [
     "craftax",
     "gymnax",
@@ -42,7 +41,6 @@ all = [
     "octax",
     "pgx",
     "playground",
-    "sequax @ git+https://github.com/marcojira/sequax.git"
 ]
 
 [dependency-groups]

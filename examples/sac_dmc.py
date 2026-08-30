@@ -30,8 +30,8 @@ from modrax.training import TrainConfig, WandbConfig, train
 class MuJoCoSACConfig(TrainConfig):
     env_cfg: MuJoCoPlaygroundConfig = MuJoCoPlaygroundConfig(env_name="CartpoleBalance")
     network_cfg: SACNetworkConfig = SACNetworkConfig(use_running_norm=True)
-    alg_cfg: SACConfig = SACConfig()
-    wandb: WandbConfig = WandbConfig(enabled=True)
+    alg_cfg: SACConfig = SACConfig(total_steps=10_000_000)
+    wandb: WandbConfig = WandbConfig(enabled=False)
     eval_interval: int = 5
     seed: int = 0
     save_gif_wandb: bool = True
