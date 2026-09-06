@@ -1,6 +1,11 @@
 """Train PPO with LSTM or GTrXL memory on Craftax.
 
-Run once with ``--architecture lstm`` and once with ``--architecture gtrxl``.
+Used for the experiments reported here: https://api.wandb.ai/links/gauthier-gidel/rkdqficc
+
+The experiment used one NVIDIA L40S GPU and ten seeds per architecture. To reproduce:
+
+    uv run python examples/ppo_recurrent_craftax.py --architecture lstm --seed <seed>
+    uv run python examples/ppo_recurrent_craftax.py --architecture gtrxl --seed <seed>
 """
 
 import math
