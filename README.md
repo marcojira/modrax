@@ -1,16 +1,21 @@
 # Modrax
-A concise, extandable and performant RL library based on Jax and NNX. The goal is to be somewhere between the one-file implementations with duplicated code and large complex frameworks where customization is hard.
+A concise, extandable and performant RL library based on Jax and NNX. The goal is to reduce code duplication and ad hoc
+structure while hopefully remaining legible and easy to customize.
+
+> [!IMPORTANT]
+> 🏆 **New Craftax result:** The LSTM agent in [`ppo_recurrent_craftax.py`](examples/ppo_recurrent_craftax.py) achieves **19.5%** on **Craftax-1B**.
 
 ## Design
 
-Modrax is organized around three composable objects:
+Modrax is organized around three composable objects. Each has a base class that defines its common interface:
 
-- **Environment** wrapper over common RL suites (`gymnax`, `pgx`, `octax`, `craftax` and `mujoco_playground`) given them a common interface.
-  - Also additional functionality like auto_reset, optimistic resets, etc.
-- **Network** checkpointable support for NNX networks.
-- **Algorithm** takes a network and an environment and implements a training step function that updates the network.
+- `Environment`: Common interface over RL suites, exposes `obs_shape`, `action_spec`, and batched `reset` and `step` methods
+- `Network`: NNX network, exposes `policy` and `eval_policy`, with hooks for resetting recurrent state.
+  - Also provides easy to use checkpointing methods.
+- `Algorithm`: Initialized with an `Environment` and a `Network`. Must implement a `step` method that runs one training
+  iteration and returns training metrics.
 
-These three are brought together by `training.py` that implements a training loop and handles logging, checkpointing and evaluation.
+These three are brought together by `training.py` that contains a training loop and handles logging, checkpointing and evaluation.
 
 ## Quick start
 ```bash
@@ -45,4 +50,3 @@ We recommend checking out the `examples` folder to get a better understanding of
 ### Policy
 
 ### Rollout
-
