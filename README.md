@@ -2,7 +2,7 @@
 A concise, extandable and performant RL library based on Jax and NNX. The goal is to reduce code duplication and ad hoc
 structure while hopefully remaining legible and easy to customize.
 
-> [!IMPORTANT]
+> [!NOTE]
 > 🏆 **New Craftax result:** The LSTM agent in [`ppo_recurrent_craftax.py`](examples/ppo_recurrent_craftax.py) achieves **19.5%** on **Craftax-1B**.
 
 ## Design
