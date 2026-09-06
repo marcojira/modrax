@@ -70,7 +70,7 @@ class CraftaxRecurrentPPOConfig(TrainConfig):
     wandb: WandbConfig = WandbConfig(
         enabled=True,
         project="modrax",
-        group="lstm-vs-gtrxl-craftax",
+        group="lstm_vs_gtrxl_craftax",
     )
     eval_interval: int = 250
     eval_max_steps: int = 5000
