@@ -1,35 +1,39 @@
 # Modrax
-A concise, extandable and performant RL library based on Jax and NNX. The goal is to reduce code duplication and ad hoc
-structure while hopefully remaining legible and easy to customize.
+A compact, modular reinforcement learning library built with JAX and Flax NNX.
+
+> [!WARNING]
+> Modrax is under development and its API may change.
 
 > [!NOTE]
 > 🏆 **New Craftax result:** The LSTM agent in [`ppo_recurrent_craftax.py`](examples/ppo_recurrent_craftax.py) achieves **19.5%** on **Craftax-1B**.
 
 ## Design
+Modrax is based around three main object.
 
-Modrax is organized around three composable objects. Each has a base class that defines its common interface:
+- `Env` provides standardized batched environment interaction for different environment suites.
+- `Network` is an NNX model that contains the train/evaluation policy
+- `Alg` is initialized with an `Env` and a `Network`, then defines a training step that updates the network given interactions with the `Env`.
 
-- `Environment`: Common interface over RL suites, exposes `obs_shape`, `action_spec`, and batched `reset` and `step` methods
-- `Network`: NNX network, exposes `policy` and `eval_policy`, with hooks for resetting recurrent state.
-  - Also provides easy to use checkpointing methods.
-- `Algorithm`: Initialized with an `Environment` and a `Network`. Must implement a `step` method that runs one training
-  iteration and returns training metrics.
+These three are brought together by `training.py` that contains a training loop which handles logging, checkpointing and evaluation.
 
-These three are brought together by `training.py` that contains a training loop and handles logging, checkpointing and evaluation.
+## Installation and quick start
 
-## Quick start
+Modrax requires Python 3.11 or newer and uses [uv](https://docs.astral.sh/uv/).
+
 ```bash
 git clone https://github.com/marcojira/modrax.git
 cd modrax
 
-# Install with envs you need: craftax, gymnax, octax, pgx, mujoco (or `all` for every one)
-uv sync --extra gymnax
+# Install Modrax with the Gymnax environment integration
+uv sync --python 3.11 --extra gymnax
 
-# Launch example script
-uv run examples/pqn_minatar.py
+# Check the available configuration options
+uv run examples/pqn_minatar.py --help
 ```
 
-We recommend checking out the `examples` folder to get a better understanding of Modrax's structure and how to use it!
+Environment integrations are optional. Use `--extra all` to install every available integration. The base dependencies currently install CUDA-enabled JAX.
+
+See the [`examples`](examples) folder for more.
 
 [WIP 🚧] More documentation coming soon.
 
